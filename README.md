@@ -242,7 +242,7 @@ Continue.dev est l'assistant de codage IA open source principal. Conçu pour con
 * **Provider Dragonfly dans l'outil de configuration :** Implémenter le provider dragonfly dans l'outil de configuration initial de Continue, afin de ne plus avoir à modifier la configuration à la main.
 * **Mise à jour automatique :** Étudier la possibilité de mettre en place une fonction de mise à jour automatique.
 
-# ORIGINAL README ENDS HERE
+# ORIGINAL README
 
 <div align="center">
 
