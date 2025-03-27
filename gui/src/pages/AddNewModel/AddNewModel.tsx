@@ -13,10 +13,10 @@ import ModelCard from "../../components/modelSelection/ModelCard";
 import Toggle from "../../components/modelSelection/Toggle";
 import { IdeMessengerContext } from "../../context/IdeMessenger";
 import { useNavigationListener } from "../../hooks/useNavigationListener";
+import { setDefaultModel } from "../../redux/slices/configSlice";
 import { ModelPackage, models } from "./configs/models";
 import { providers } from "./configs/providers";
 import { CustomModelButton } from "./ConfigureProvider";
-import { setDefaultModel } from "../../redux/slices/configSlice";
 
 const IntroDiv = styled.div`
   padding: 8px 12px;
@@ -39,7 +39,7 @@ const GridDiv = styled.div`
  */
 const modelsByProvider: Record<string, ModelPackage[]> = {
   "Open AI": [models.gpt4turbo, models.gpt4o, models.gpt35turbo],
-  Anthropic: [models.claude3Opus, models.claude3Sonnet, models.claude3Haiku],
+  Anthropic: [models.claude3Opus, models.claude3Sonnet, models.claude35Haiku],
   Mistral: [
     models.codestral,
     models.mistral7b,
@@ -49,7 +49,11 @@ const modelsByProvider: Record<string, ModelPackage[]> = {
     models.mistralLarge,
   ],
   Cohere: [models.commandR, models.commandRPlus],
-  DeepSeek: [models.deepseekCoderApi, models.deepseekChatApi],
+  DeepSeek: [
+    models.deepseekCoderApi,
+    models.deepseekChatApi,
+    models.deepseekReasonerApi,
+  ],
   Gemini: [models.geminiPro, models.gemini15Pro, models.gemini15Flash],
   "Open Source": [models.llama3Chat, models.mistralOs, models.deepseek],
 };
@@ -122,22 +126,24 @@ function AddNewModel() {
             </div>
 
             <GridDiv>
-              {Object.entries(providers).map(([providerName, modelInfo], i) => (
-                <ModelCard
-                  key={`${providerName}-${i}`}
-                  title={modelInfo.title}
-                  description={modelInfo.description}
-                  tags={modelInfo.tags}
-                  icon={modelInfo.icon}
-                  refUrl={`https://docs.continue.dev/reference/Model%20Providers/${
-                    modelInfo.refPage || modelInfo.provider.toLowerCase()
-                  }`}
-                  onClick={(e) => {
-                    console.log(`/addModel/provider/${providerName}`);
-                    navigate(`/addModel/provider/${providerName}`);
-                  }}
-                />
-              ))}
+              {Object.entries(providers).map(([providerName, modelInfo], i) =>
+                modelInfo ? (
+                  <ModelCard
+                    key={`${providerName}-${i}`}
+                    title={modelInfo.title}
+                    description={modelInfo.description}
+                    tags={modelInfo.tags}
+                    icon={modelInfo.icon}
+                    refUrl={`https://docs.continue.dev/reference/Model%20Providers/${
+                      modelInfo.refPage || modelInfo.provider.toLowerCase()
+                    }`}
+                    onClick={(e) => {
+                      console.log(`/addModel/provider/${providerName}`);
+                      navigate(`/addModel/provider/${providerName}`);
+                    }}
+                  />
+                ) : null,
+              )}
             </GridDiv>
           </>
         ) : (
@@ -176,6 +182,9 @@ function AddNewModel() {
                         dimensions={config.dimensions}
                         providerOptions={config.providerOptions}
                         onClick={(e, dimensionChoices, selectedProvider) => {
+                          if (!selectedProvider) {
+                            return;
+                          }
                           const model = {
                             ...config.params,
                             ..._.merge(
@@ -187,7 +196,7 @@ function AddNewModel() {
                                 };
                               }) || []),
                             ),
-                            provider: providers[selectedProvider].provider,
+                            provider: providers[selectedProvider]?.provider,
                           };
                           ideMessenger.post("config/addModel", { model });
                           dispatch(
@@ -212,13 +221,13 @@ function AddNewModel() {
           disabled={false}
           onClick={(e) => {
             ideMessenger.post("config/openProfile", {
-              profileId: "local",
+              profileId: undefined,
             });
           }}
         >
           <h3 className="my-2 text-center">
             <Cog6ToothIcon className="inline-block h-5 w-5 px-4 align-middle" />
-            Open config.json
+            Open Assistant configuration
           </h3>
         </CustomModelButton>
       </div>

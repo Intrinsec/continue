@@ -7,7 +7,7 @@ interface OnboardingCardTabsProps {
   onTabClick: (tabName: TabTitle) => void;
 }
 
-export type TabTitle = "Quickstart" | "Best" | "Local";
+export type TabTitle = "Quickstart" | "Best" | "Local" | "ExistingUserHubIntro";
 
 export const TabTitles: { [k in TabTitle]: { md: string; default: string } } = {
   Quickstart: {
@@ -21,6 +21,10 @@ export const TabTitles: { [k in TabTitle]: { md: string; default: string } } = {
   Local: {
     md: "Local",
     default: "Local with Ollama",
+  },
+  ExistingUserHubIntro: {
+    md: "Try out hub.continue.dev",
+    default: "Try out hub.continue.dev",
   },
 };
 
@@ -80,10 +84,11 @@ export function OnboardingCardTabs({
 
             return (
               <TabButton
-                className="xs:py-2 xs:px-3 px-6 py-2 sm:px-5"
+                className="xs:py-2 xs:px-3 rounded-t-sm px-6 py-2 hover:brightness-125 sm:px-5"
                 key={tabType}
                 isActive={activeTab === tabType}
                 onClick={() => onTabClick(tabType as TabTitle)}
+                data-testid={`onboarding-tab-${tabType}`}
               >
                 <p className="m-0 hidden font-medium md:block">
                   {titles.default}

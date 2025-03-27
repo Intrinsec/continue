@@ -3,6 +3,7 @@ import { ControlPlaneSessionInfo } from "../control-plane/client";
 import type {
   ContinueRcJson,
   DiffLine,
+  FileStatsMap,
   FileType,
   IDE,
   IdeInfo,
@@ -12,6 +13,7 @@ import type {
   Problem,
   Range,
   RangeInFile,
+  TerminalOptions,
   Thread,
 } from "../";
 
@@ -23,22 +25,16 @@ export type ToIdeFromWebviewOrCoreProtocol = {
   // Methods from IDE type
   getIdeInfo: [undefined, IdeInfo];
   getWorkspaceDirs: [undefined, string[]];
-  listFolders: [undefined, string[]];
   writeFile: [{ path: string; contents: string }, void];
   showVirtualFile: [{ name: string; content: string }, void];
-  getContinueDir: [undefined, string];
   openFile: [{ path: string }, void];
   openUrl: [string, void];
-  runCommand: [{ command: string }, void];
+  runCommand: [{ command: string; options?: TerminalOptions }, void];
   getSearchResults: [{ query: string }, string];
   subprocess: [{ command: string; cwd?: string }, [string, string]];
   saveFile: [{ filepath: string }, void];
   fileExists: [{ filepath: string }, boolean];
   readFile: [{ filepath: string }, string];
-  showDiff: [
-    { filepath: string; newContents: string; stepIndex: number },
-    void,
-  ];
   diffLine: [
     {
       diffLine: DiffLine;
@@ -76,6 +72,8 @@ export type ToIdeFromWebviewOrCoreProtocol = {
   isTelemetryEnabled: [undefined, boolean];
   getUniqueId: [undefined, string];
   getTags: [string, IndexTag[]];
+  readSecrets: [{ keys: string[] }, Record<string, string>];
+  writeSecrets: [{ secrets: Record<string, string> }, void];
   // end methods from IDE type
 
   getIdeSettings: [undefined, IdeSettings];
@@ -90,17 +88,16 @@ export type ToIdeFromWebviewOrCoreProtocol = {
   ];
   getGitRootPath: [{ dir: string }, string | undefined];
   listDir: [{ dir: string }, [string, FileType][]];
-  getLastModified: [{ files: string[] }, { [path: string]: number }];
+  getFileStats: [{ files: string[] }, FileStatsMap];
 
   gotoDefinition: [{ location: Location }, RangeInFile[]];
 
   getGitHubAuthToken: [GetGhTokenArgs, string | undefined];
   getControlPlaneSessionInfo: [
-    { silent: boolean },
+    { silent: boolean; useOnboarding: boolean },
     ControlPlaneSessionInfo | undefined,
   ];
   logoutOfControlPlane: [undefined, void];
-  pathSep: [undefined, string];
 };
 
 export type ToWebviewOrCoreFromIdeProtocol = {

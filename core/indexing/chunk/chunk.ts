@@ -1,8 +1,7 @@
 import { Chunk, ChunkWithoutID } from "../../index.js";
 import { countTokensAsync } from "../../llm/countTokens.js";
-import { extractMinimalStackTraceInfo } from "../../util/extractMinimalStackTraceInfo.js";
-import { Telemetry } from "../../util/posthog.js";
 import { supportedLanguages } from "../../util/treeSitter.js";
+import { getUriFileExtension, getUriPathBasename } from "../../util/uri.js";
 
 import { basicChunker } from "./basic.js";
 import { codeChunker } from "./code.js";
@@ -15,27 +14,21 @@ export type ChunkDocumentParam = {
 };
 
 async function* chunkDocumentWithoutId(
-  filepath: string,
+  fileUri: string,
   contents: string,
   maxChunkSize: number,
 ): AsyncGenerator<ChunkWithoutID> {
   if (contents.trim() === "") {
     return;
   }
-
-  const segs = filepath.split(".");
-  const ext = segs[segs.length - 1];
-  if (ext in supportedLanguages) {
+  const extension = getUriFileExtension(fileUri);
+  if (extension in supportedLanguages) {
     try {
-      for await (const chunk of codeChunker(filepath, contents, maxChunkSize)) {
+      for await (const chunk of codeChunker(fileUri, contents, maxChunkSize)) {
         yield chunk;
       }
       return;
     } catch (e: any) {
-      Telemetry.capture("code_chunker_error", {
-        fileExtension: ext,
-        stack: extractMinimalStackTraceInfo(e.stack),
-      });
       // falls back to basicChunker
     }
   }
@@ -84,11 +77,7 @@ export async function* chunkDocument({
   }
 }
 
-export function shouldChunk(
-  pathSep: string,
-  filepath: string,
-  contents: string,
-): boolean {
+export function shouldChunk(fileUri: string, contents: string): boolean {
   if (contents.length > 1000000) {
     // if a file has more than 1m characters then skip it
     return false;
@@ -96,7 +85,6 @@ export function shouldChunk(
   if (contents.length === 0) {
     return false;
   }
-  const basename = filepath.split(pathSep).pop();
-  // files without extensions are often binary files, skip it if so
-  return basename?.includes(".") ?? false;
+  const baseName = getUriPathBasename(fileUri);
+  return baseName.includes(".");
 }

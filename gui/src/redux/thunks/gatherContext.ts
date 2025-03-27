@@ -6,14 +6,10 @@ import {
   MessageContent,
   RangeInFile,
 } from "core";
-import { getBasename, getRelativePath } from "core/util";
-import resolveEditorContent, {
-  hasSlashCommandOrContextProvider,
-} from "../../components/mainInput/resolveInput";
-import { ThunkApiType } from "../store";
+import * as URI from "uri-js";
+import resolveEditorContent from "../../components/mainInput/tiptap/resolveInput";
 import { selectDefaultModel } from "../slices/configSlice";
-import { setIsGatheringContext } from "../slices/sessionSlice";
-import { updateFileSymbolsFromNewContextItems } from "./updateFileSymbols";
+import { ThunkApiType } from "../store";
 
 export const gatherContext = createAsyncThunk<
   {
@@ -38,19 +34,14 @@ export const gatherContext = createAsyncThunk<
     const defaultContextProviders =
       state.config.config.experimental?.defaultContext ?? [];
 
-    if (!state.config.defaultModelTitle) {
-      console.error("Failed to gather context, no model selected");
-      return;
+    if (!defaultModel) {
+      console.error(
+        "gatherContext thunk: Cannot gather context, no model selected",
+      );
+      throw new Error("No chat model selected");
     }
 
     // Resolve context providers and construct new history
-    const shouldGatherContext =
-      modifiers.useCodebase || hasSlashCommandOrContextProvider(editorState);
-
-    if (shouldGatherContext) {
-      dispatch(setIsGatheringContext(true));
-    }
-
     let [selectedContextItems, selectedCode, content] =
       await resolveEditorContent({
         editorState,
@@ -58,54 +49,60 @@ export const gatherContext = createAsyncThunk<
         ideMessenger: extra.ideMessenger,
         defaultContextProviders,
         dispatch,
-        selectedModelTitle: state.config.defaultModelTitle,
+        selectedModelTitle: defaultModel.title,
       });
 
     // Automatically use currently open file
     if (!modifiers.noContext) {
-      const usingFreeTrial = defaultModel?.provider === "free-trial";
+      const usingFreeTrial = defaultModel.provider === "free-trial";
 
-      const currentFile = await extra.ideMessenger.ide.getCurrentFile();
-      if (currentFile) {
-        let currentFileContents = currentFile.contents;
-        if (usingFreeTrial) {
-          currentFileContents = currentFile.contents
-            .split("\n")
-            .slice(0, 1000)
-            .join("\n");
-        }
-        if (
-          !selectedContextItems.find(
-            (item) => item.uri?.value === currentFile.path,
-          )
-        ) {
+      const currentFileResponse = await extra.ideMessenger.request(
+        "context/getContextItems",
+        {
+          name: "currentFile",
+          query: "non-mention-usage",
+          fullInput: "",
+          selectedCode: [],
+          selectedModelTitle: defaultModel.title,
+        },
+      );
+      if (currentFileResponse.status === "success") {
+        const items = currentFileResponse.content;
+        if (items.length > 0) {
+          const currentFile = items[0];
+          const uri = currentFile.uri?.value;
+
           // don't add the file if it's already in the context items
-          selectedContextItems.unshift({
-            content: `The following file is currently open. Don't reference it if it's not relevant to the user's message.\n\n\`\`\`${getRelativePath(
-              currentFile.path,
-              await extra.ideMessenger.ide.getWorkspaceDirs(),
-            )}\n${currentFileContents}\n\`\`\``,
-            name: `Active file: ${getBasename(currentFile.path)}`,
-            description: currentFile.path,
-            id: {
-              itemId: currentFile.path,
+          if (
+            uri &&
+            !selectedContextItems.find(
+              (item) => item.uri?.value && URI.equal(item.uri.value, uri),
+            )
+          ) {
+            // Limit to 1000 lines if using free trial
+            if (usingFreeTrial) {
+              currentFile.content = currentFile.content
+                .split("\n")
+                .slice(0, 1000)
+                .join("\n");
+              if (!currentFile.content.endsWith("```")) {
+                currentFile.content += "\n```";
+              }
+            }
+            currentFile.id = {
               providerTitle: "file",
-            },
-            uri: {
-              type: "file",
-              value: currentFile.path,
-            },
-          });
+              itemId: uri,
+            };
+            selectedContextItems.unshift(currentFile);
+          }
         }
       }
     }
 
-    dispatch(updateFileSymbolsFromNewContextItems(selectedContextItems));
-
     if (promptPreamble) {
       if (typeof content === "string") {
         content = promptPreamble + content;
-      } else {
+      } else if (content[0].type === "text") {
         content[0].text = promptPreamble + content[0].text;
       }
     }

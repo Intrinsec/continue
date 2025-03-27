@@ -1,7 +1,9 @@
-import { createAsyncThunk } from "@reduxjs/toolkit";
+import { createAsyncThunk, unwrapResult } from "@reduxjs/toolkit";
 import { selectCurrentToolCall } from "../selectors/selectCurrentToolCall";
+import { selectDefaultModel } from "../slices/configSlice";
 import {
   acceptToolCall,
+  cancelToolCall,
   setCalling,
   setToolCallOutput,
 } from "../slices/sessionSlice";
@@ -14,7 +16,6 @@ export const callTool = createAsyncThunk<void, undefined, ThunkApiType>(
     const state = getState();
     const toolCallState = selectCurrentToolCall(state);
 
-    console.log("calling tool", toolCallState.toolCall);
     if (!toolCallState) {
       return;
     }
@@ -23,16 +24,16 @@ export const callTool = createAsyncThunk<void, undefined, ThunkApiType>(
       return;
     }
 
-    if (!state.config.defaultModelTitle) {
-      console.error("Cannot call tools, no model selected");
-      return;
+    const defaultModel = selectDefaultModel(state);
+    if (!defaultModel) {
+      throw new Error("No model selected");
     }
 
     dispatch(setCalling());
 
     const result = await extra.ideMessenger.request("tools/call", {
       toolCall: toolCallState.toolCall,
-      selectedModelTitle: state.config.defaultModelTitle,
+      selectedModelTitle: defaultModel.title,
     });
 
     if (result.status === "success") {
@@ -41,12 +42,31 @@ export const callTool = createAsyncThunk<void, undefined, ThunkApiType>(
       dispatch(acceptToolCall());
 
       // Send to the LLM to continue the conversation
-      dispatch(
+      const response = await dispatch(
         streamResponseAfterToolCall({
           toolCallId: toolCallState.toolCall.id,
           toolOutput: contextItems,
         }),
       );
+      unwrapResult(response);
+    } else {
+      dispatch(cancelToolCall());
+
+      const output = await dispatch(
+        streamResponseAfterToolCall({
+          toolCallId: toolCallState.toolCallId,
+          toolOutput: [
+            {
+              icon: "problems",
+              name: "Tool Call Error",
+              description: "Tool Call Failed",
+              content: `The tool call failed with the message:\n\n${result.error}\n\nPlease try something else or request further instructions.`,
+              hidden: false,
+            },
+          ],
+        }),
+      );
+      unwrapResult(output);
     }
   },
 );

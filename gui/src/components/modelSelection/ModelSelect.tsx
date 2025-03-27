@@ -1,40 +1,31 @@
-import { Listbox } from "@headlessui/react";
 import {
+  CheckIcon,
   ChevronDownIcon,
   Cog6ToothIcon,
   CubeIcon,
   PlusIcon,
-  TrashIcon,
 } from "@heroicons/react/24/outline";
 import { useContext, useEffect, useRef, useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import { useDispatch } from "react-redux";
 import styled from "styled-components";
-import {
-  defaultBorderRadius,
-  Divider,
-  lightGray,
-  vscInputBackground,
-} from "..";
+import { defaultBorderRadius, lightGray } from "..";
+import { useAuth } from "../../context/Auth";
 import { IdeMessengerContext } from "../../context/IdeMessenger";
 import AddModelForm from "../../forms/AddModelForm";
-import { setDialogMessage, setShowDialog } from "../../redux/slices/uiSlice";
-import {
-  getFontSize,
-  getMetaKeyLabel,
-  isMetaEquivalentKeyPressed,
-} from "../../util";
-import ConfirmationDialog from "../dialogs/ConfirmationDialog";
 import { useAppSelector } from "../../redux/hooks";
 import {
   selectDefaultModel,
   setDefaultModel,
 } from "../../redux/slices/configSlice";
+import { setDialogMessage, setShowDialog } from "../../redux/slices/uiSlice";
+import { getMetaKeyLabel, isMetaEquivalentKeyPressed } from "../../util";
+import { Listbox, ListboxButton, ListboxOption, ListboxOptions } from "../ui";
 
 interface ModelOptionProps {
   option: Option;
   idx: number;
   showMissingApiKeyMsg: boolean;
-  showDelete?: boolean;
+  isSelected?: boolean;
 }
 
 interface Option {
@@ -42,67 +33,6 @@ interface Option {
   title: string;
   apiKey?: string;
 }
-
-const MAX_HEIGHT_PX = 300;
-
-const StyledListboxButton = styled(Listbox.Button)`
-  font-family: inherit;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  border: none;
-  cursor: pointer;
-  font-size: ${getFontSize() - 2}px;
-  background: transparent;
-  color: ${lightGray};
-  &:focus {
-    outline: none;
-  }
-`;
-
-const StyledListboxOptions = styled(Listbox.Options)<{ $showabove: boolean }>`
-  margin-top: 4px;
-  position: absolute;
-  list-style: none;
-  padding: 0px;
-  white-space: nowrap;
-  cursor: default;
-
-  display: flex;
-  flex-direction: column;
-
-  border-radius: ${defaultBorderRadius};
-  border: 0.5px solid ${lightGray};
-  background-color: ${vscInputBackground};
-
-  max-height: ${MAX_HEIGHT_PX}px;
-  overflow-y: scroll;
-
-  scrollbar-width: none;
-
-  ${(props) => (props.$showabove ? "bottom: 100%;" : "top: 100%;")}
-`;
-
-const StyledListboxOption = styled(Listbox.Option)<{ isDisabled?: boolean }>`
-  border-radius: ${defaultBorderRadius};
-  padding: 6px 12px;
-
-  ${({ isDisabled }) =>
-    !isDisabled &&
-    `
-    cursor: pointer;
-
-    &:hover {
-      background: ${lightGray}33;
-    }
-  `}
-
-  ${({ isDisabled }) =>
-    isDisabled &&
-    `
-    opacity: 0.5;
-  `}
-`;
 
 const IconBase = styled.div<{ $hovered: boolean }>`
   width: 1.2em;
@@ -119,9 +49,6 @@ const IconBase = styled.div<{ $hovered: boolean }>`
   }
 `;
 
-const StyledTrashIcon = styled(IconBase).attrs({ as: TrashIcon })``;
-const StyledCog6ToothIcon = styled(IconBase).attrs({ as: Cog6ToothIcon })``;
-
 function modelSelectTitle(model: any): string {
   if (model?.title) return model?.title;
   if (model?.model !== undefined && model?.model.trim() !== "") {
@@ -136,44 +63,21 @@ function modelSelectTitle(model: any): string {
 function ModelOption({
   option,
   idx,
-  showDelete,
   showMissingApiKeyMsg,
+  isSelected,
 }: ModelOptionProps) {
   const ideMessenger = useContext(IdeMessengerContext);
 
-  const dispatch = useDispatch();
   const [hovered, setHovered] = useState(false);
 
-  function onClickDelete(e) {
+  function onClickGear(e: any) {
     e.stopPropagation();
     e.preventDefault();
 
-    dispatch(setShowDialog(true));
-    dispatch(
-      setDialogMessage(
-        <ConfirmationDialog
-          title={`Delete ${option.title}`}
-          text={`Are you sure you want to remove ${option.title} from your configuration?`}
-          onConfirm={() => {
-            ideMessenger.post("config/deleteModel", {
-              title: option.title,
-            });
-          }}
-        />,
-      ),
-    );
+    ideMessenger.post("config/openProfile", { profileId: undefined });
   }
 
-  function onClickGear(e) {
-    e.stopPropagation();
-    e.preventDefault();
-
-    ideMessenger.post("config/openProfile", {
-      profileId: "local",
-    });
-  }
-
-  function handleOptionClick(e) {
+  function handleOptionClick(e: any) {
     if (showMissingApiKeyMsg) {
       e.preventDefault();
       e.stopPropagation();
@@ -181,19 +85,19 @@ function ModelOption({
   }
 
   return (
-    <StyledListboxOption
+    <ListboxOption
       key={idx}
+      disabled={showMissingApiKeyMsg}
       value={option.value}
-      isDisabled={showMissingApiKeyMsg}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={handleOptionClick}
     >
-      <div className="flex w-full flex-col gap-0.5">
-        <div className="flex w-full items-center justify-between">
-          <div className="flex flex-grow items-center">
-            <CubeIcon className="mr-2 h-4 w-4 flex-shrink-0" />
-            <span className="flex-grow">
+      <div className="flex flex-col gap-0.5">
+        <div className="flex flex-1 flex-row items-center justify-between gap-2">
+          <div className="flex flex-1 flex-row items-center gap-2">
+            <CubeIcon className="h-3 w-3 flex-shrink-0" />
+            <span className="line-clamp-1 flex-1">
               {option.title}
               {showMissingApiKeyMsg && (
                 <span className="ml-2 text-[10px] italic">
@@ -202,15 +106,18 @@ function ModelOption({
               )}
             </span>
           </div>
-          <div className="ml-5 flex items-center">
-            <StyledCog6ToothIcon $hovered={hovered} onClick={onClickGear} />
-            {showDelete && (
-              <StyledTrashIcon $hovered={hovered} onClick={onClickDelete} />
+          <div className="flex flex-shrink-0 flex-row items-center gap-1">
+            {isSelected && <CheckIcon className="h-3 w-3 flex-shrink-0" />}
+            {hovered && (
+              <Cog6ToothIcon
+                className="h-3 w-3 flex-shrink-0"
+                onClick={onClickGear}
+              />
             )}
           </div>
         </div>
       </div>
-    </StyledListboxOption>
+    </ListboxOption>
   );
 }
 
@@ -218,14 +125,10 @@ function ModelSelect() {
   const dispatch = useDispatch();
   const defaultModel = useAppSelector(selectDefaultModel);
   const allModels = useAppSelector((state) => state.config.config.models);
-  const ideMessenger = useContext(IdeMessengerContext);
-  const [showAbove, setShowAbove] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [options, setOptions] = useState<Option[]>([]);
   const [sortedOptions, setSortedOptions] = useState<Option[]>([]);
-  const selectedProfileId = useAppSelector(
-    (store) => store.session.selectedProfileId,
-  );
+  const { selectedProfile } = useAuth();
 
   // Sort so that options without an API key are at the end
   useEffect(() => {
@@ -239,21 +142,17 @@ function ModelSelect() {
 
   useEffect(() => {
     setOptions(
-      allModels.map((model) => {
-        return {
-          value: model.title,
-          title: modelSelectTitle(model),
-          apiKey: model.apiKey,
-        };
-      }),
+      allModels
+        .filter((m) => !m.roles || m.roles.includes("chat"))
+        .map((model) => {
+          return {
+            value: model.title,
+            title: modelSelectTitle(model),
+            apiKey: model.apiKey,
+          };
+        }),
     );
   }, [allModels]);
-
-  useEffect(() => {
-    const handleResize = () => calculatePosition();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -275,19 +174,7 @@ function ModelSelect() {
     };
   }, [options, defaultModel]);
 
-  function calculatePosition() {
-    if (!buttonRef.current) {
-      return;
-    }
-    const rect = buttonRef.current.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const spaceAbove = rect.top;
-    const dropdownHeight = MAX_HEIGHT_PX;
-
-    setShowAbove(spaceBelow < dropdownHeight && spaceAbove > spaceBelow);
-  }
-
-  function onClickAddModel(e) {
+  function onClickAddModel(e: MouseEvent) {
     e.stopPropagation();
     e.preventDefault();
 
@@ -308,69 +195,61 @@ function ModelSelect() {
   }
 
   return (
+    // <span className="line-clamp-1">Hiad sfasdfasdf asdfasdf</span>
     <Listbox
       onChange={async (val: string) => {
         if (val === defaultModel?.title) return;
         dispatch(setDefaultModel({ title: val }));
       }}
     >
-      <div className="relative">
-        <StyledListboxButton
+      <div className="relative flex">
+        <ListboxButton
           data-testid="model-select-button"
           ref={buttonRef}
-          className="h-[18px] overflow-hidden"
-          style={{ padding: 0 }}
-          onClick={calculatePosition}
+          className="h-[18px] gap-1 border-none text-gray-400"
         >
-          <div className="flex max-w-[33vw] items-center gap-0.5 text-gray-400 transition-colors duration-200">
-            <span className="truncate">
-              {modelSelectTitle(defaultModel) || "Select model"}{" "}
-            </span>
-            <ChevronDownIcon
-              className="h-3 w-3 flex-shrink-0"
-              aria-hidden="true"
-            />
-          </div>
-        </StyledListboxButton>
-        <StyledListboxOptions
-          $showabove={showAbove}
-          className="z-50 max-w-[90vw]"
-        >
-          <div className={`max-h-[${MAX_HEIGHT_PX}px]`}>
+          <span className="line-clamp-1 hover:brightness-110">
+            {modelSelectTitle(defaultModel) || "Select model"}
+          </span>
+          <ChevronDownIcon
+            className="h-2 w-2 flex-shrink-0 hover:brightness-110"
+            aria-hidden="true"
+          />
+        </ListboxButton>
+        <ListboxOptions className={"min-w-[160px]"}>
+          <div className={`no-scrollbar max-h-[300px] overflow-y-auto`}>
             {sortedOptions.map((option, idx) => (
               <ModelOption
                 option={option}
                 idx={idx}
                 key={idx}
-                showDelete={options.length > 1}
                 showMissingApiKeyMsg={option.apiKey === ""}
+                isSelected={option.value === defaultModel?.title}
               />
             ))}
           </div>
 
-          <div className="mt-auto">
-            {selectedProfileId === "local" && (
+          <div className="">
+            {selectedProfile?.profileType === "local" && (
               <>
-                <StyledListboxOption
+                <ListboxOption
                   key={options.length}
                   onClick={onClickAddModel}
                   value={"addModel" as any}
                 >
                   <div className="flex items-center py-0.5">
-                    <PlusIcon className="mr-2 h-4 w-4" />
+                    <PlusIcon className="mr-2 h-3 w-3" />
                     Add Chat model
                   </div>
-                </StyledListboxOption>
+                </ListboxOption>
               </>
             )}
 
-            <Divider className="!my-0" />
-
-            <span className="block px-3 py-3" style={{ color: lightGray }}>
-              <code>{getMetaKeyLabel()} + '</code> to toggle
+            <span className="block px-2 py-1" style={{ color: lightGray }}>
+              {getMetaKeyLabel()}' to toggle model
             </span>
           </div>
-        </StyledListboxOptions>
+        </ListboxOptions>
       </div>
     </Listbox>
   );

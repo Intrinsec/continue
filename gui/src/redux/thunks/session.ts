@@ -1,15 +1,16 @@
-import { createAsyncThunk, Dispatch, unwrapResult } from "@reduxjs/toolkit";
+import { createAsyncThunk, unwrapResult } from "@reduxjs/toolkit";
 import { ChatMessage, Session, SessionMetadata } from "core";
 import { NEW_SESSION_TITLE } from "core/util/constants";
 import { renderChatMessage } from "core/util/messageContent";
-import { ThunkApiType } from "../store";
+import { IIdeMessenger } from "../../context/IdeMessenger";
+import { selectDefaultModel } from "../slices/configSlice";
 import {
   deleteSessionMetadata,
   newSession,
   setAllSessionMetadata,
   updateSessionMetadata,
 } from "../slices/sessionSlice";
-import { IIdeMessenger } from "../../context/IdeMessenger";
+import { ThunkApiType } from "../store";
 
 const MAX_TITLE_LENGTH = 100;
 
@@ -97,6 +98,7 @@ export const loadSession = createAsyncThunk<
       const result = await dispatch(
         saveCurrentSession({
           openNewSession: false,
+          generateTitle: true,
         }),
       );
       unwrapResult(result);
@@ -147,11 +149,11 @@ function getChatTitleFromMessage(message: ChatMessage) {
 
 export const saveCurrentSession = createAsyncThunk<
   void,
-  { openNewSession: boolean },
+  { openNewSession: boolean; generateTitle: boolean },
   ThunkApiType
 >(
   "session/saveCurrent",
-  async ({ openNewSession }, { dispatch, extra, getState }) => {
+  async ({ openNewSession, generateTitle }, { dispatch, extra, getState }) => {
     const state = getState();
     if (state.session.history.length === 0) {
       return;
@@ -165,21 +167,19 @@ export const saveCurrentSession = createAsyncThunk<
     // Now save previous session and update chat title if relevant
     let title = state.session.title;
     if (title === NEW_SESSION_TITLE) {
-      if (
-        state.config.config?.ui?.getChatTitles &&
-        state.config.defaultModelTitle
-      ) {
+      const defaultModel = selectDefaultModel(state);
+      if (!state.config.config?.disableSessionTitles && defaultModel) {
         let assistantResponse = state.session.history
           ?.filter((h) => h.message.role === "assistant")[0]
           ?.message?.content?.toString();
 
-        if (assistantResponse) {
+        if (assistantResponse && generateTitle) {
           try {
             const result = await extra.ideMessenger.request(
               "chatDescriber/describe",
               {
                 text: assistantResponse,
-                selectedModelTitle: state.config.defaultModelTitle,
+                selectedModelTitle: defaultModel.title,
               },
             );
             if (result.status === "success" && result.content) {
@@ -190,9 +190,9 @@ export const saveCurrentSession = createAsyncThunk<
           }
         }
       }
-      // Fallbacks if above doesn't work out or getChatTitles = false
+      // Fallbacks if above doesn't work out or session titles disabled
       if (title === NEW_SESSION_TITLE) {
-        title = getChatTitleFromMessage(history[0].message);
+        title = getChatTitleFromMessage(state.session.history[0].message);
       }
     }
     // More fallbacks in case of no title

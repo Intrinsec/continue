@@ -1,8 +1,9 @@
+import { ProfileDescription } from "core/config/ProfileLifecycleManager";
 import _ from "lodash";
-import { getLocalStorage } from "./localStorage";
 import { KeyboardEvent } from "react";
+import { getLocalStorage } from "./localStorage";
 
-type Platform = "mac" | "linux" | "windows" | "unknown";
+export type Platform = "mac" | "linux" | "windows" | "unknown";
 
 export function getPlatform(): Platform {
   const platform = window.navigator.platform.toUpperCase();
@@ -34,16 +35,7 @@ export function isMetaEquivalentKeyPressed({
 }
 
 export function getMetaKeyLabel(): string {
-  const platform = getPlatform();
-  switch (platform) {
-    case "mac":
-      return "⌘";
-    case "linux":
-    case "windows":
-      return "^";
-    default:
-      return "^";
-  }
+  return getPlatform() === "mac" ? "⌘" : "Ctrl";
 }
 
 export function getAltKeyLabel(): string {
@@ -58,6 +50,10 @@ export function getAltKeyLabel(): string {
 
 export function getFontSize(): number {
   return getLocalStorage("fontSize") ?? (isJetBrains() ? 15 : 14);
+}
+
+export function fontSize(n: number): string {
+  return `${getFontSize() + n}px`;
 }
 
 export function isJetBrains() {
@@ -113,4 +109,8 @@ export function updatedObj(old: any, pathToValue: { [key: string]: any }) {
   }
 
   return newObject;
+}
+
+export function isLocalProfile(profile: ProfileDescription): boolean {
+  return profile.profileType === "local";
 }

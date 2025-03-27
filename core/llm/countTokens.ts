@@ -27,9 +27,9 @@ class LlamaEncoding implements Encoding {
 }
 
 class NonWorkerAsyncEncoder implements AsyncEncoder {
-  constructor(private readonly encoding: Encoding) {}
+  constructor(private readonly encoding: Encoding) { }
 
-  async close(): Promise<void> {}
+  async close(): Promise<void> { }
 
   async encode(text: string): Promise<number[]> {
     return this.encoding.encode(text);
@@ -106,9 +106,12 @@ function countTokens(
   const encoding = encodingForModel(modelName);
   if (Array.isArray(content)) {
     return content.reduce((acc, part) => {
-      return acc + part.type === "imageUrl"
-        ? countImageTokens(part)
-        : encoding.encode(part.text ?? "", "all", []).length;
+      return (
+        acc +
+        (part.type === "text"
+          ? encoding.encode(part.text ?? "", "all", []).length
+          : countImageTokens(part))
+      );
     }, 0);
   } else {
     return encoding.encode(content ?? "", "all", []).length;
@@ -335,7 +338,7 @@ function messageIsEmpty(message: ChatMessage): boolean {
   }
   if (Array.isArray(message.content)) {
     return message.content.every(
-      (item) => !item.imageUrl && item.text?.trim() === "",
+      (item) => item.type === "text" && item.text?.trim() === "",
     );
   }
   return false;
@@ -363,6 +366,7 @@ function chatMessageIsEmpty(message: ChatMessage): boolean {
         message.content.trim() === "" &&
         !message.toolCalls
       );
+    case "thinking":
     case "tool":
       return false;
   }
@@ -380,8 +384,8 @@ function compileChatMessages(
 ): ChatMessage[] {
   let msgsCopy = msgs
     ? msgs
-        .map((msg) => ({ ...msg }))
-        .filter((msg) => !chatMessageIsEmpty(msg) && msg.role !== "system")
+      .map((msg) => ({ ...msg }))
+      .filter((msg) => !chatMessageIsEmpty(msg) && msg.role !== "system")
     : [];
 
   msgsCopy = addSpaceToAnyEmptyMessages(msgsCopy);
@@ -396,10 +400,10 @@ function compileChatMessages(
 
   if (
     (systemMessage && systemMessage.trim() !== "") ||
-    msgs?.[0].role === "system"
+    msgs?.[0]?.role === "system"
   ) {
     let content = "";
-    if (msgs?.[0].role === "system") {
+    if (msgs?.[0]?.role === "system") {
       content = renderChatMessage(msgs?.[0]);
     }
     if (systemMessage && systemMessage.trim() !== "") {
@@ -448,11 +452,7 @@ function compileChatMessages(
     functionTokens + maxTokens + TOKEN_BUFFER_FOR_SAFETY,
   );
 
-  if (
-    systemMessage &&
-    history.length >= 2 &&
-    history[history.length - 2].role === "system"
-  ) {
+  if (history.length >= 2 && history[history.length - 2].role === "system") {
     const movedSystemMessage = history.splice(-2, 1)[0];
     history.unshift(movedSystemMessage);
   }
@@ -470,5 +470,6 @@ export {
   pruneLinesFromTop,
   pruneRawPromptFromTop,
   pruneStringFromBottom,
-  pruneStringFromTop,
+  pruneStringFromTop
 };
+

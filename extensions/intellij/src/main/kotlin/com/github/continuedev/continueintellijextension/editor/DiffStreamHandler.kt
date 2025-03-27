@@ -13,6 +13,7 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
+import kotlin.math.max
 import kotlin.math.min
 
 
@@ -125,7 +126,9 @@ class DiffStreamHandler(
 
         diffBlocks.remove(diffBlock)
 
-        if (!didAccept) {
+        if (didAccept) {
+            updatePositionsOnAccept(diffBlock.startLine)
+        } else {
             updatePositionsOnReject(diffBlock.startLine, diffBlock.addedLines.size, diffBlock.deletedLines.size)
         }
 
@@ -177,7 +180,7 @@ class DiffStreamHandler(
         // Update the highlighter to show the current line
         curLine.highlighter?.let { editor.markupModel.removeHighlighter(it) }
         curLine.highlighter = editor.markupModel.addLineHighlighter(
-            curLineKey, min(curLine.index, editor.document.lineCount - 1), HighlighterLayer.LAST
+            curLineKey, min(curLine.index, max(0, editor.document.lineCount - 1)), HighlighterLayer.LAST
         )
 
         // Remove the unfinished lines highlighter
@@ -186,10 +189,16 @@ class DiffStreamHandler(
         }
     }
 
+    private fun updatePositionsOnAccept(startLine: Int) {
+        updatePositions(startLine, 0)
+    }
 
     private fun updatePositionsOnReject(startLine: Int, numAdditions: Int, numDeletions: Int) {
         val offset = -numAdditions + numDeletions
+        updatePositions(startLine, offset)
+    }
 
+    private fun updatePositions(startLine: Int, offset: Int) {
         diffBlocks.forEach { block ->
             if (block.startLine > startLine) {
                 block.updatePosition(block.startLine + offset)

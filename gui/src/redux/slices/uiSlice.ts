@@ -5,21 +5,27 @@ import {
   defaultOnboardingCardState,
   OnboardingCardState,
 } from "../../components/OnboardingCard";
+import { getLocalStorage, LocalStorageKey } from "../../util/localStorage";
 
 type ToolSetting =
   | "allowedWithPermission"
   | "allowedWithoutPermission"
   | "disabled";
 
+type ToolGroupSetting = "include" | "exclude";
+
 type UIState = {
   showDialog: boolean;
   dialogMessage: string | JSX.Element | undefined;
   dialogEntryOn: boolean;
   onboardingCard: OnboardingCardState;
+  isExploreDialogOpen: boolean;
+  hasDismissedExploreDialog: boolean;
   shouldAddFileForEditing: boolean;
-  useTools: boolean;
   toolSettings: { [toolName: string]: ToolSetting };
+  toolGroupSettings: { [toolGroupName: string]: ToolGroupSetting };
   ttsActive: boolean;
+  isBlockSettingsToolbarExpanded: boolean;
 };
 
 export const DEFAULT_TOOL_SETTING: ToolSetting = "allowedWithPermission";
@@ -31,9 +37,12 @@ export const uiSlice = createSlice({
     dialogMessage: "",
     dialogEntryOn: false,
     onboardingCard: defaultOnboardingCardState,
+    isExploreDialogOpen: getLocalStorage(LocalStorageKey.IsExploreDialogOpen),
+    hasDismissedExploreDialog: getLocalStorage(
+      LocalStorageKey.HasDismissedExploreDialog,
+    ),
     shouldAddFileForEditing: false,
     ttsActive: false,
-    useTools: false,
     toolSettings: {
       [BuiltInToolNames.ReadFile]: "allowedWithoutPermission",
       [BuiltInToolNames.CreateNewFile]: "allowedWithPermission",
@@ -44,6 +53,10 @@ export const uiSlice = createSlice({
       [BuiltInToolNames.SearchWeb]: "allowedWithoutPermission",
       [BuiltInToolNames.ViewDiff]: "allowedWithoutPermission",
     },
+    toolGroupSettings: {
+      BUILT_IN_GROUP_NAME: "include",
+    },
+    isBlockSettingsToolbarExpanded: true,
   } as UIState,
   reducers: {
     setOnboardingCard: (
@@ -67,14 +80,19 @@ export const uiSlice = createSlice({
     setShowDialog: (state, action: PayloadAction<UIState["showDialog"]>) => {
       state.showDialog = action.payload;
     },
-    // Tools
-    toggleUseTools: (state) => {
-      state.useTools = !state.useTools;
+    setIsExploreDialogOpen: (
+      state,
+      action: PayloadAction<UIState[LocalStorageKey.IsExploreDialogOpen]>,
+    ) => {
+      state.isExploreDialogOpen = action.payload;
     },
+    setHasDismissedExploreDialog: (state, action: PayloadAction<boolean>) => {
+      state.hasDismissedExploreDialog = action.payload;
+    },
+    // Tools
     addTool: (state, action: PayloadAction<Tool>) => {
-      state.toolSettings[action.payload.function.name] = action.payload.readonly
-        ? "allowedWithoutPermission"
-        : "allowedWithPermission";
+      state.toolSettings[action.payload.function.name] =
+        "allowedWithPermission";
     },
     toggleToolSetting: (state, action: PayloadAction<string>) => {
       const setting = state.toolSettings[action.payload];
@@ -94,8 +112,21 @@ export const uiSlice = createSlice({
           break;
       }
     },
+    toggleToolGroupSetting: (state, action: PayloadAction<string>) => {
+      const setting = state.toolGroupSettings[action.payload] ?? "include";
+
+      if (setting === "include") {
+        state.toolGroupSettings[action.payload] = "exclude";
+      } else {
+        state.toolGroupSettings[action.payload] = "include";
+      }
+    },
     setTTSActive: (state, { payload }: PayloadAction<boolean>) => {
       state.ttsActive = payload;
+    },
+    toggleBlockSettingsToolbar: (state) => {
+      state.isBlockSettingsToolbarExpanded =
+        !state.isBlockSettingsToolbarExpanded;
     },
   },
 });
@@ -105,10 +136,13 @@ export const {
   setDialogMessage,
   setDialogEntryOn,
   setShowDialog,
-  toggleUseTools,
+  setIsExploreDialogOpen,
+  setHasDismissedExploreDialog,
   toggleToolSetting,
+  toggleToolGroupSetting,
   addTool,
   setTTSActive,
+  toggleBlockSettingsToolbar,
 } = uiSlice.actions;
 
 export default uiSlice.reducer;

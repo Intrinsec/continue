@@ -22,6 +22,9 @@ class HttpContextProvider extends BaseContextProvider {
         this.options.description ||
         "Retrieve a context item from a custom server",
       type: "normal",
+      renderInlineAs:
+        this.options.renderInlineAs ||
+        HttpContextProvider.description.renderInlineAs,
     };
   }
 
@@ -33,6 +36,7 @@ class HttpContextProvider extends BaseContextProvider {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...(this.options.headers || {}),
       },
       body: JSON.stringify({
         query: query || "",

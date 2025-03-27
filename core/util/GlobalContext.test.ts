@@ -29,12 +29,6 @@ describe("GlobalContext", () => {
     expect(value).toBe(true);
   });
 
-  it("should update and get a string value correctly", () => {
-    globalContext.update("selectedTabAutocompleteModel", "test-model");
-    const value = globalContext.get("selectedTabAutocompleteModel");
-    expect(value).toBe("test-model");
-  });
-
   it("should update and get an object value correctly", () => {
     const workspaceIdentifier = "workspace-1";
     globalContext.update("lastSelectedProfileForWorkspace", {
@@ -75,7 +69,7 @@ describe("GlobalContext", () => {
     const value = globalContext.get("indexingPaused");
     expect(value).toBeUndefined();
     expect(consoleWarnMock).toHaveBeenCalledWith(
-      expect.stringContaining("Error parsing global context")
+      expect.stringContaining("Error parsing global context"),
     );
 
     // Clean up
@@ -99,7 +93,7 @@ describe("GlobalContext", () => {
     expect(value).toBeUndefined();
 
     expect(consoleWarnMock).toHaveBeenCalledWith(
-      expect.stringContaining("Error updating global context")
+      expect.stringContaining("Error updating global context"),
     );
 
     // Clean up
@@ -108,15 +102,11 @@ describe("GlobalContext", () => {
 
   it("should update and retrieve multiple values correctly", () => {
     globalContext.update("indexingPaused", true);
-    globalContext.update("selectedTabAutocompleteModel", "test-model");
     globalContext.update("hasDismissedConfigTsNoticeJetBrains", false);
 
     expect(globalContext.get("indexingPaused")).toBe(true);
-    expect(globalContext.get("selectedTabAutocompleteModel")).toBe(
-      "test-model"
-    );
     expect(globalContext.get("hasDismissedConfigTsNoticeJetBrains")).toBe(
-      false
+      false,
     );
   });
 
@@ -125,16 +115,7 @@ describe("GlobalContext", () => {
     expect(globalContext.get("hasAlreadyCreatedAPromptFile")).toBe(true);
   });
 
-  it("should handle curEmbeddingsProviderId correctly", () => {
-    globalContext.update("curEmbeddingsProviderId", "test-provider-id");
-    expect(globalContext.get("curEmbeddingsProviderId")).toBe(
-      "test-provider-id"
-    );
-  });
-
   it("should not crash or throw when getting a key that hasn't been set", () => {
-    expect(
-      globalContext.get("hasAlreadyCreatedAPromptFile")
-    ).toBeUndefined();
+    expect(globalContext.get("hasAlreadyCreatedAPromptFile")).toBeUndefined();
   });
 });

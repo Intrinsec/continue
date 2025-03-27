@@ -4,7 +4,6 @@ import { RunResult } from "sqlite3";
 
 import { IContinueServerClient } from "../../continueServer/interface.js";
 import { Chunk, IndexTag, IndexingProgressUpdate } from "../../index.js";
-import { getBasename } from "../../util/index.js";
 import { DatabaseConnection, SqliteDb, tagToString } from "../refreshIndex.js";
 import {
   IndexResultType,
@@ -15,6 +14,7 @@ import {
 } from "../types.js";
 
 import { chunkDocument, shouldChunk } from "./chunk.js";
+import { getUriPathBasename } from "../../util/uri.js";
 
 export class ChunkCodebaseIndex implements CodebaseIndex {
   relativeExpectedTime: number = 1;
@@ -23,7 +23,6 @@ export class ChunkCodebaseIndex implements CodebaseIndex {
 
   constructor(
     private readonly readFile: (filepath: string) => Promise<string>,
-    private readonly pathSep: string,
     private readonly continueServerClient: IContinueServerClient,
     private readonly maxChunkSize: number,
   ) {}
@@ -81,15 +80,15 @@ export class ChunkCodebaseIndex implements CodebaseIndex {
         `
         INSERT INTO chunk_tags (chunkId, tag)
         SELECT id, ? FROM chunks
-        WHERE cacheKey = ? AND path = ?
+        WHERE cacheKey = ?
       `,
-        [tagString, item.cacheKey, item.path],
+        [tagString, item.cacheKey],
       );
       await markComplete([item], IndexResultType.AddTag);
       accumulatedProgress += 1 / results.addTag.length / 4;
       yield {
         progress: accumulatedProgress,
-        desc: `Adding ${getBasename(item.path)}`,
+        desc: `Adding ${getUriPathBasename(item.path)}`,
         status: "indexing",
       };
     }
@@ -111,7 +110,7 @@ export class ChunkCodebaseIndex implements CodebaseIndex {
       accumulatedProgress += 1 / results.removeTag.length / 4;
       yield {
         progress: accumulatedProgress,
-        desc: `Removing ${getBasename(item.path)}`,
+        desc: `Removing ${getUriPathBasename(item.path)}`,
         status: "indexing",
       };
     }
@@ -138,7 +137,7 @@ export class ChunkCodebaseIndex implements CodebaseIndex {
       accumulatedProgress += 1 / results.del.length / 4;
       yield {
         progress: accumulatedProgress,
-        desc: `Removing ${getBasename(item.path)}`,
+        desc: `Removing ${getUriPathBasename(item.path)}`,
         status: "indexing",
       };
     }
@@ -159,13 +158,14 @@ export class ChunkCodebaseIndex implements CodebaseIndex {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tag TEXT NOT NULL,
         chunkId INTEGER NOT NULL,
-        FOREIGN KEY (chunkId) REFERENCES chunks (id)
+        FOREIGN KEY (chunkId) REFERENCES chunks (id),
+        UNIQUE (tag, chunkId)
     )`);
   }
 
   private async packToChunks(pack: PathAndCacheKey): Promise<Chunk[]> {
     const contents = await this.readFile(pack.path);
-    if (!shouldChunk(this.pathSep, pack.path, contents)) {
+    if (!shouldChunk(pack.path, contents)) {
       return [];
     }
     const chunks: Chunk[] = [];

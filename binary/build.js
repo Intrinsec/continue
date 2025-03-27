@@ -53,7 +53,7 @@ const targetToLanceDb = {
   "linux-arm64": "@lancedb/vectordb-linux-arm64-gnu",
   "linux-x64": "@lancedb/vectordb-linux-x64-gnu",
   "win32-x64": "@lancedb/vectordb-win32-x64-msvc",
-  "win32-arm64": "@lancedb/vectordb-win32-x64-msvc", // they don't have a win32-arm64 build
+  "win32-arm64": "@lancedb/vectordb-win32-arm64-msvc",
 };
 
 async function installNodeModuleInTempDirAndCopyToCurrent(packageName, toCopy) {
@@ -118,6 +118,22 @@ async function installNodeModuleInTempDirAndCopyToCurrent(packageName, toCopy) {
 }
 
 (async () => {
+  // Informs of where to look for node_sqlite3.node https://www.npmjs.com/package/bindings#:~:text=The%20searching%20for,file%20is%20found
+  // This is only needed for our `pkg` command at build time
+  fs.writeFileSync(
+    "out/package.json",
+    JSON.stringify(
+      {
+        name: "binary",
+        version: "1.0.0",
+        author: "Continue Dev, Inc",
+        license: "Apache-2.0",
+      },
+      undefined,
+      2,
+    ),
+  );
+
   console.log("[info] Downloading prebuilt lancedb...");
   for (const target of targets) {
     if (targetToLanceDb[target]) {
@@ -193,6 +209,8 @@ async function installNodeModuleInTempDirAndCopyToCurrent(packageName, toCopy) {
     format: "cjs",
     platform: "node",
     sourcemap: true,
+    minify: true,
+    treeShaking: true,
     loader: {
       // eslint-disable-next-line @typescript-eslint/naming-convention
       ".node": "file",
@@ -225,31 +243,22 @@ async function installNodeModuleInTempDirAndCopyToCurrent(packageName, toCopy) {
     fs.mkdirSync(targetDir, { recursive: true });
     console.log(`[info] Building ${target}...`);
     execCmdSync(
-      `npx pkg --no-bytecode --public-packages "*" --public pkgJson/${target} --out-path ${targetDir}`,
+      `npx pkg --no-bytecode --public-packages "*" --public --compress GZip pkgJson/${target} --out-path ${targetDir}`,
     );
 
     // Download and unzip prebuilt sqlite3 binary for the target
     console.log("[info] Downloading node-sqlite3");
-    const downloadUrl = `https://github.com/TryGhost/node-sqlite3/releases/download/v5.1.7/sqlite3-v5.1.7-napi-v6-${
-      target === "win32-arm64" ? "win32-ia32" : target
-    }.tar.gz`;
+
+    const downloadUrl =
+      // node-sqlite3 doesn't have a pre-built binary for win32-arm64
+      target === "win32-arm64"
+        ? "https://continue-server-binaries.s3.us-west-1.amazonaws.com/win32-arm64/node_sqlite3.tar.gz"
+        : `https://github.com/TryGhost/node-sqlite3/releases/download/v5.1.7/sqlite3-v5.1.7-napi-v6-${
+            target
+          }.tar.gz`;
+
     execCmdSync(`curl -L -o ${targetDir}/build.tar.gz ${downloadUrl}`);
     execCmdSync(`cd ${targetDir} && tar -xvzf build.tar.gz`);
-
-    // Informs of where to look for node_sqlite3.node https://www.npmjs.com/package/bindings#:~:text=The%20searching%20for,file%20is%20found
-    fs.writeFileSync(
-      `${targetDir}/package.json`,
-      JSON.stringify(
-        {
-          name: "binary",
-          version: "1.0.0",
-          author: "Continue Dev, Inc",
-          license: "Apache-2.0",
-        },
-        undefined,
-        2,
-      ),
-    );
 
     // Copy to build directory for testing
     try {
@@ -273,16 +282,22 @@ async function installNodeModuleInTempDirAndCopyToCurrent(packageName, toCopy) {
       `node_modules/${targetToLanceDb[target]}/index.node`,
       `${targetDir}/index.node`,
     );
+
+    // Informs the `continue-binary` of where to look for node_sqlite3.node
+    // https://www.npmjs.com/package/bindings#:~:text=The%20searching%20for,file%20is%20found
+    fs.writeFileSync(`${targetDir}/package.json`, "");
   }
 
+  // Cleanup - this is needed when running locally
+  fs.rmSync("out/package.json");
+
   const pathsToVerify = [];
-  for (target of targets) {
+  for (const target of targets) {
     const exe = target.startsWith("win") ? ".exe" : "";
     const targetDir = `bin/${target}`;
     pathsToVerify.push(
       `${targetDir}/continue-binary${exe}`,
       `${targetDir}/index.node`, // @lancedb
-      "package.json", // Informs of where to look for node_sqlite3.node https://www.npmjs.com/package/bindings#:~:text=The%20searching%20for,file%20is%20found
       `${targetDir}/build/Release/node_sqlite3.node`,
     );
   }

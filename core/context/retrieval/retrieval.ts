@@ -1,8 +1,5 @@
-import path from "path";
-
 import { BranchAndDir, ContextItem, ContextProviderExtras } from "../../";
-import TransformersJsEmbeddingsProvider from "../../llm/llms/TransformersJsEmbeddingsProvider";
-import { resolveRelativePathInWorkspace } from "../../util/ideUtils";
+import { getUriDescription } from "../../util/uri";
 import { INSTRUCTIONS_BASE_ITEM } from "../providers/utils";
 
 import { RetrievalPipelineOptions } from "./pipelines/BaseRetrievalPipeline";
@@ -16,26 +13,16 @@ export async function retrieveContextItemsFromEmbeddings(
   options: any | undefined,
   filterDirectory: string | undefined,
 ): Promise<ContextItem[]> {
-  if (!extras.embeddingsProvider) {
-    return [];
-  }
-
-  // transformers.js not supported in JetBrains IDEs right now
-
-  const isJetBrainsAndTransformersJs =
-    extras.embeddingsProvider.providerName ===
-      TransformersJsEmbeddingsProvider.providerName &&
-    (await extras.ide.getIdeInfo()).ideType === "jetbrains";
-
-  if (isJetBrainsAndTransformersJs) {
-    void extras.ide.showToast(
-      "warning",
-      "Codebase retrieval is limited when `embeddingsProvider` is empty or set to `transformers.js` in JetBrains. " +
-        "You can use Ollama to set up local embeddings, use our 'free-trial', " +
-        "or configure your own. See here to learn more: " +
-        "https://docs.continue.dev/customize/model-types/embeddings",
-    );
-  }
+  // Currently you can use codebase without an embeddings provider and it will just skip the embeddings inputs
+  // if (!extras.embeddingsProvider) {
+  //   void extras.ide.showToast(
+  //     "warning",
+  //     "Set up an embeddings model to use this feature. Visit the docs to learn more: " +
+  //       "https://docs.continue.dev/customize/model-roles/embeddings",
+  //   );
+  //   return [];
+  // }
+  const includeEmbeddings = !!extras.config.selectedModelByRole.embed;
 
   // Get tags to retrieve for
   const workspaceDirs = await extras.ide.getWorkspaceDirs();
@@ -71,25 +58,15 @@ export async function retrieveContextItemsFromEmbeddings(
     ? RerankerRetrievalPipeline
     : NoRerankerRetrievalPipeline;
 
-  if (filterDirectory) {
-    // Handle relative paths
-    filterDirectory = await resolveRelativePathInWorkspace(
-      filterDirectory,
-      extras.ide,
-    );
-  }
-
   const pipelineOptions: RetrievalPipelineOptions = {
     nFinal,
     nRetrieve,
     tags,
-    pathSep: await extras.ide.pathSep(),
     filterDirectory,
     ide: extras.ide,
     input: extras.fullInput,
     llm: extras.llm,
     config: extras.config,
-    includeEmbeddings: !isJetBrainsAndTransformersJs,
   };
 
   const pipeline = new pipelineType(pipelineOptions);
@@ -97,12 +74,21 @@ export async function retrieveContextItemsFromEmbeddings(
     tags,
     filterDirectory,
     query: extras.fullInput,
+    includeEmbeddings,
   });
 
   if (results.length === 0) {
-    throw new Error(
-      "Warning: No results found for @codebase context provider.",
-    );
+    if (extras.config.disableIndexing) {
+      void extras.ide.showToast("warning", "No results found.");
+      return [];
+    } else {
+      void extras.ide.showToast(
+        "warning",
+        "No results found. If you think this is an error, re-index your codebase.",
+      );
+      // TODO - add "re-index" option to warning message which clears and reindexes codebase
+    }
+    return [];
   }
 
   return [
@@ -114,19 +100,17 @@ export async function retrieveContextItemsFromEmbeddings(
     ...results
       .sort((a, b) => a.filepath.localeCompare(b.filepath))
       .map((r) => {
-        const name = `${path.basename(r.filepath)} (${r.startLine}-${
-          r.endLine
-        })`;
-        const description = `${r.filepath}`;
+        const { relativePathOrBasename, last2Parts, baseName } =
+          getUriDescription(r.filepath, workspaceDirs);
 
-        if (r.filepath.includes("package.json")) {
-          console.log();
+        if (baseName === "package.json") {
+          console.warn("Retrieval pipeline: package.json detected");
         }
 
         return {
-          name,
-          description,
-          content: `\`\`\`${name}\n${r.content}\n\`\`\``,
+          name: `${baseName} (${r.startLine + 1}-${r.endLine + 1})`,
+          description: last2Parts,
+          content: `\`\`\`${relativePathOrBasename}\n${r.content}\n\`\`\``,
           uri: {
             type: "file" as const,
             value: r.filepath,

@@ -1,6 +1,7 @@
 import { BaseContextProvider } from "../";
 import { ContextProviderName } from "../../";
 
+import ClipboardContextProvider from "./ClipboardContextProvider";
 import CodeContextProvider from "./CodeContextProvider";
 import ContinueProxyContextProvider from "./ContinueProxyContextProvider";
 import CurrentFileContextProvider from "./CurrentFileContextProvider";
@@ -11,6 +12,7 @@ import DiscordContextProvider from "./DiscordContextProvider";
 import DocsContextProvider from "./DocsContextProvider";
 import FileTreeContextProvider from "./FileTreeContextProvider";
 import FolderContextProvider from "./FolderContextProvider";
+import GitCommitContextProvider from "./GitCommitContextProvider";
 import GitHubIssuesContextProvider from "./GitHubIssuesContextProvider";
 import GitLabMergeRequestContextProvider from "./GitLabMergeRequestContextProvider";
 import GoogleContextProvider from "./GoogleContextProvider";
@@ -62,6 +64,8 @@ export const Providers: (typeof BaseContextProvider)[] = [
   GreptileContextProvider,
   WebContextProvider,
   MCPContextProvider,
+  GitCommitContextProvider,
+  ClipboardContextProvider,
 ];
 
 export function contextProviderClassFromName(

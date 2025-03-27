@@ -1,13 +1,15 @@
 import { ConfigJson } from "@continuedev/config-types";
+import { ConfigResult } from "@continuedev/config-yaml";
 
 import { ControlPlaneClient } from "../../control-plane/client.js";
+import { PRODUCTION_ENV } from "../../control-plane/env.js";
 import {
   ContinueConfig,
   IDE,
   IdeSettings,
   SerializedContinueConfig,
 } from "../../index.js";
-import { ConfigResult } from "../load.js";
+import { ProfileDescription } from "../ProfileLifecycleManager.js";
 
 import doLoadConfig from "./doLoadConfig.js";
 import { IProfileLoader } from "./IProfileLoader.js";
@@ -15,8 +17,7 @@ import { IProfileLoader } from "./IProfileLoader.js";
 export default class ControlPlaneProfileLoader implements IProfileLoader {
   private static RELOAD_INTERVAL = 1000 * 60 * 15; // every 15 minutes
 
-  readonly profileId: string;
-  profileTitle: string;
+  description: ProfileDescription;
 
   workspaceSettings: ConfigJson | undefined;
 
@@ -29,12 +30,25 @@ export default class ControlPlaneProfileLoader implements IProfileLoader {
     private writeLog: (message: string) => Promise<void>,
     private readonly onReload: () => void,
   ) {
-    this.profileId = workspaceId;
-    this.profileTitle = workspaceTitle;
+    this.description = {
+      id: workspaceId,
+      profileType: "control-plane",
+      iconUrl: "",
+      fullSlug: {
+        ownerSlug: "",
+        packageSlug: "",
+        versionSlug: "",
+      },
+      title: workspaceTitle,
+      errors: undefined,
+      uri: `${PRODUCTION_ENV.APP_URL}workspaces/${workspaceId}`,
+    };
 
     setInterval(async () => {
       this.workspaceSettings =
-        await this.controlPlaneClient.getSettingsForWorkspace(this.profileId);
+        await this.controlPlaneClient.getSettingsForWorkspace(
+          this.description.id,
+        );
       this.onReload();
     }, ControlPlaneProfileLoader.RELOAD_INTERVAL);
   }
@@ -43,23 +57,22 @@ export default class ControlPlaneProfileLoader implements IProfileLoader {
     const settings =
       this.workspaceSettings ??
       ((await this.controlPlaneClient.getSettingsForWorkspace(
-        this.profileId,
+        this.description.id,
       )) as any);
     const serializedConfig: SerializedContinueConfig = settings;
 
-    const results = await doLoadConfig(
+    return await doLoadConfig(
       this.ide,
       this.ideSettingsPromise,
       this.controlPlaneClient,
       this.writeLog,
       serializedConfig,
+      undefined,
+      undefined,
       this.workspaceId,
+      undefined,
+      null,
     );
-
-    return {
-      ...results,
-      errors: [], // Don't do config validation here, it happens in admin panel
-    };
   }
 
   setIsActive(isActive: boolean): void {}

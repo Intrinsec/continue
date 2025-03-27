@@ -2,16 +2,15 @@ import { jest } from "@jest/globals";
 import lance from "vectordb";
 
 import { testConfigHandler, testIde } from "../test/fixtures";
-import {
-  mockPathAndCacheKey,
-  mockTag,
-  testContinueServerClient,
-  updateIndexAndAwaitGenerator,
-} from "./test/indexing";
 import { getLanceDbPath } from "../util/paths";
 
 import { LanceDbIndex } from "./LanceDbIndex";
 import { DatabaseConnection, SqliteDb } from "./refreshIndex";
+import {
+  mockPathAndCacheKey,
+  mockTag,
+  updateIndexAndAwaitGenerator,
+} from "./test/indexing";
 import { IndexResultType } from "./types";
 
 jest.useFakeTimers();
@@ -26,15 +25,18 @@ describe.skip("ChunkCodebaseIndex", () => {
   }
 
   beforeAll(async () => {
-    const pathSep = await testIde.pathSep();
-    const mockConfig = await testConfigHandler.loadConfig();
+    const { config: mockConfig } = await testConfigHandler.loadConfig();
+    if (!mockConfig) {
+      throw new Error("Failed to load config");
+    }
+    if (!mockConfig.selectedModelByRole.embed) {
+      throw new Error("No embeddings model selected");
+    }
 
-    index = new LanceDbIndex(
-      mockConfig.embeddingsProvider,
+    index = (await LanceDbIndex.create(
+      mockConfig.selectedModelByRole.embed,
       testIde.readFile.bind(testIde),
-      pathSep,
-      testContinueServerClient,
-    );
+    ))!;
 
     sqliteDb = await SqliteDb.get();
     lanceDb = await lance.connect(getLanceDbPath());

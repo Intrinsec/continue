@@ -1,9 +1,9 @@
 package com.github.continuedev.continueintellijextension.autocomplete
 
-import com.github.continuedev.continueintellijextension.`continue`.uuid
 import com.github.continuedev.continueintellijextension.services.ContinueExtensionSettings
 import com.github.continuedev.continueintellijextension.services.ContinuePluginService
-import com.google.gson.Gson
+import com.github.continuedev.continueintellijextension.utils.toUriOrNull
+import com.github.continuedev.continueintellijextension.utils.uuid
 import com.intellij.injected.editor.VirtualFileWindow
 import com.intellij.openapi.application.*
 import com.intellij.openapi.components.Service
@@ -11,8 +11,10 @@ import com.intellij.openapi.components.ServiceManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.InlayProperties
+import com.intellij.openapi.editor.impl.EditorImpl
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.wm.WindowManager
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
@@ -33,20 +35,33 @@ fun PsiElement.isInjectedText(): Boolean {
     return false
 }
 
+fun Editor.addInlayElement(
+    lines: List<String>,
+    offset: Int,
+    properties: InlayProperties
+) {
+    if (this is EditorImpl) {
+        if (lines[0].isNotEmpty()) {
+            inlayModel.addInlineElement(offset, properties, ContinueInlayRenderer(listOf(lines[0])))
+        }
+        if (lines.size > 1) {
+            inlayModel.addBlockElement(offset, properties, ContinueInlayRenderer(lines.drop(1)))
+        }
+    }
+}
+
 @Service(Service.Level.PROJECT)
 class AutocompleteService(private val project: Project) {
-    var pendingCompletion: PendingCompletion? = null;
+    var pendingCompletion: PendingCompletion? = null
     private val autocompleteLookupListener = project.service<AutocompleteLookupListener>()
-    private var widget: AutocompleteSpinnerWidget? = null
+    private val widget: AutocompleteSpinnerWidget? by lazy {
+        WindowManager.getInstance().getStatusBar(project)
+            ?.getWidget(AutocompleteSpinnerWidget.ID) as? AutocompleteSpinnerWidget
+    }
 
     // To avoid triggering another completion on partial acceptance,
     // we need to keep track of whether the last change was a partial accept
     var lastChangeWasPartialAccept = false
-
-    init {
-        val statusBar = WindowManager.getInstance().getStatusBar(project)
-        widget = statusBar.getWidget("AutocompleteSpinnerWidget") as? AutocompleteSpinnerWidget
-    }
 
     fun triggerCompletion(editor: Editor) {
         val settings =
@@ -63,57 +78,66 @@ class AutocompleteService(private val project: Project) {
         val completionId = uuid()
         val offset = editor.caretModel.primaryCaret.offset
         pendingCompletion = PendingCompletion(editor, offset, completionId, null)
-        widget?.setLoading(true)
 
         // Request a completion from the core
         val virtualFile = FileDocumentManager.getInstance().getFile(editor.document)
+
+        val uri = virtualFile?.toUriOrNull() ?: return
+
+        widget?.setLoading(true)
+
+        val line = editor.caretModel.primaryCaret.logicalPosition.line
         val column = editor.caretModel.primaryCaret.logicalPosition.column
         val input = mapOf(
             "completionId" to completionId,
-            "filepath" to virtualFile?.path,
+            "filepath" to uri,
             "pos" to mapOf(
-                "line" to editor.caretModel.primaryCaret.logicalPosition.line,
+                "line" to line,
                 "character" to column
             ),
-            "recentlyEditedFiles" to emptyList<String>(),
-            "recentlyEditedRanges" to emptyList<String>(),
-            "clipboardText" to ""
+            "clipboardText" to "",
+            "recentlyEditedRanges" to emptyList<Any>(),
+            "recentlyVisitedRanges" to emptyList<Any>(),
         )
-
-        val lineStart = editor.document.getLineStartOffset(editor.caretModel.primaryCaret.logicalPosition.line)
-        val lineEnd = editor.document.getLineEndOffset(editor.caretModel.primaryCaret.logicalPosition.line)
-        val lineLength = lineEnd - lineStart
 
         project.service<ContinuePluginService>().coreMessenger?.request(
             "autocomplete/complete",
             input,
             null,
             ({ response ->
-                widget?.setLoading(false)
+                if (pendingCompletion == null || pendingCompletion?.completionId == completionId) {
+                    widget?.setLoading(false)
+                }
 
-                val completions = response as List<*>
+                val responseObject = response as Map<*, *>
+                val completions = responseObject["content"] as List<*>
+
                 if (completions.isNotEmpty()) {
                     val completion = completions[0].toString()
                     val finalTextToInsert = deduplicateCompletion(editor, offset, completion)
 
-                    if (shouldRenderCompletion(finalTextToInsert, column, lineLength, editor)) {
+                    if (shouldRenderCompletion(finalTextToInsert, offset, line, editor)) {
                         renderCompletion(editor, offset, finalTextToInsert)
                         pendingCompletion = PendingCompletion(editor, offset, completionId, finalTextToInsert)
-                        // Hide auto-popup
-//                    AutoPopupController.getInstance(project).cancelAllRequests()
                     }
                 }
             })
         )
     }
 
-    private fun shouldRenderCompletion(completion: String, column: Int, lineLength: Int, editor: Editor): Boolean {
-        if (completion.isEmpty()) {
+    private fun shouldRenderCompletion(completion: String, offset: Int, line: Int, editor: Editor): Boolean {
+        if (completion.isEmpty() || runReadAction { offset != editor.caretModel.offset }) {
             return false
         }
 
+        if (completion.lines().size == 1) {
+            return true
+        }
+
+        val endOffset = editor.document.getLineEndOffset(line)
+
         // Do not render if completion is multi-line and caret is in middle of line
-        return !(completion.lines().size > 1 && column < lineLength)
+        return offset <= endOffset && editor.document.getText(TextRange(offset, endOffset)).isBlank()
     }
 
     private fun deduplicateCompletion(editor: Editor, offset: Int, completion: String): String {
@@ -121,12 +145,19 @@ class AutocompleteService(private val project: Project) {
         return ApplicationManager.getApplication().runReadAction<String> {
             val document = editor.document
             val caretOffset = editor.caretModel.offset
+
+            // Don't care about it if it's at the end of the document
+            if (caretOffset == document.textLength) return@runReadAction completion
+
             val N = 10
             var textAfterCursor = if (caretOffset + N <= document.textLength) {
-                document.getText(com.intellij.openapi.util.TextRange(caretOffset, caretOffset + N))
+                document.getText(TextRange(caretOffset, caretOffset + N))
             } else {
-                document.getText(com.intellij.openapi.util.TextRange(caretOffset, document.textLength))
+                document.getText(TextRange(caretOffset, document.textLength))
             }
+
+            // Avoid truncating the completion text when the text after the cursor is blank
+            if (textAfterCursor.isBlank()) return@runReadAction completion
 
             // Determine the index of a newline character within the text following the cursor.
             val newlineIndex = textAfterCursor.indexOf("\r\n").takeIf { it >= 0 } ?: textAfterCursor.indexOf('\n')
@@ -165,19 +196,9 @@ class AutocompleteService(private val project: Project) {
                 properties.relatesToPrecedingText(true)
                 properties.disableSoftWrapping(true)
 
-                if (completion.lines().size > 1) {
-                    editor.inlayModel.addBlockElement(
-                        offset,
-                        properties,
-                        ContinueMultilineCustomElementRenderer(editor, completion)
-                    )
-                } else {
-                    editor.inlayModel.addInlineElement(
-                        offset,
-                        properties,
-                        ContinueCustomElementRenderer(editor, completion)
-                    )
-                }
+                val lines = completion.lines()
+                pendingCompletion = pendingCompletion?.copy(text = lines.joinToString("\n"))
+                editor.addInlayElement(lines, offset, properties)
 
 //                val attributes = TextAttributes().apply {
 //                    backgroundColor = JBColor.GREEN
@@ -205,7 +226,7 @@ class AutocompleteService(private val project: Project) {
             ({})
         )
         invokeLater {
-            clearCompletions(editor)
+            clearCompletions(editor, completion)
         }
     }
 
@@ -268,44 +289,36 @@ class AutocompleteService(private val project: Project) {
         project.service<ContinuePluginService>().coreMessenger?.request("autocomplete/cancel", null, null, ({}))
     }
 
-    fun clearCompletions(editor: Editor) {
+    fun clearCompletions(editor: Editor, completion: PendingCompletion? = pendingCompletion) {
         if (isInjectedFile(editor)) return
 
-        if (pendingCompletion != null) {
-            cancelCompletion(pendingCompletion!!)
-            pendingCompletion = null
+        if (completion != null) {
+            cancelCompletion(completion)
+            if (completion.completionId == pendingCompletion?.completionId) pendingCompletion = null
         }
-        editor.inlayModel.getInlineElementsInRange(0, editor.document.textLength).forEach {
-            if (it.renderer is ContinueCustomElementRenderer) {
-                it.dispose()
-            }
-        }
-        editor.inlayModel.getBlockElementsInRange(0, editor.document.textLength).forEach {
-            if (it.renderer is ContinueMultilineCustomElementRenderer) {
-                it.dispose()
-            }
-        }
+        disposeInlayRenderer(editor)
     }
 
     private fun isInjectedFile(editor: Editor): Boolean {
-        val psiFile = runReadAction { PsiDocumentManager.getInstance(project).getPsiFile(editor.document) }
-        if (psiFile == null) {
-            return false
+        return runReadAction {
+            PsiDocumentManager.getInstance(project).getPsiFile(editor.document)?.isInjectedText() ?: false
         }
-        val response = runReadAction { psiFile.isInjectedText() }
-        return response
     }
 
     fun hideCompletions(editor: Editor) {
         if (isInjectedFile(editor)) return
 
+        disposeInlayRenderer(editor)
+    }
+
+    private fun disposeInlayRenderer(editor: Editor) {
         editor.inlayModel.getInlineElementsInRange(0, editor.document.textLength).forEach {
-            if (it.renderer is ContinueCustomElementRenderer) {
+            if (it.renderer is ContinueInlayRenderer) {
                 it.dispose()
             }
         }
         editor.inlayModel.getBlockElementsInRange(0, editor.document.textLength).forEach {
-            if (it.renderer is ContinueMultilineCustomElementRenderer) {
+            if (it.renderer is ContinueInlayRenderer) {
                 it.dispose()
             }
         }

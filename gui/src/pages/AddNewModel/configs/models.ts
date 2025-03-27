@@ -9,6 +9,12 @@ export interface PackageDimension {
   description: string;
   options: { [key: string]: { [key: string]: any } };
 }
+
+export interface DisplayInfo {
+  title: string;
+  icon?: string;
+}
+
 export interface ModelPackage {
   title: string;
   icon?: string;
@@ -31,6 +37,106 @@ export interface ModelPackage {
 }
 
 export const models: { [key: string]: ModelPackage } = {
+  deepseekV3Chat: {
+    title: "deepseek v3",
+    description: "A model from deekseek for chat",
+    refUrl: "",
+    params: {
+      title: "deepseek_v3",
+      model: "deepseek/deepseek_v3",
+      contextLength: 2048,
+    },
+    icon: "deepseek.png",
+    dimensions: [
+      {
+        name: "Parameter Count",
+        description: "The number of parameters in the model",
+        options: {
+          r1: {
+            model: "deepseek/deepseek_v3",
+            title: "deepseek_v3",
+          },
+        },
+      },
+    ],
+    providerOptions: ["novita", "nebius"],
+    isOpenSource: true,
+  },
+  deepseekR1Chat: {
+    title: "deepseek r1",
+    description: "A model from deekseek for chat",
+    refUrl: "",
+    params: {
+      title: "deepseek-r1",
+      model: "deepseek/deepseek-r1",
+      contextLength: 2048,
+    },
+    icon: "deepseek.png",
+    dimensions: [
+      {
+        name: "Parameter Count",
+        description: "The number of parameters in the model",
+        options: {
+          r1: {
+            model: "deepseek/deepseek-r1",
+            title: "deepseek-r1",
+          },
+        },
+      },
+    ],
+    providerOptions: ["novita", "nebius"],
+    isOpenSource: true,
+  },
+  llama318BChat: {
+    title: "Llama 3.1 8B",
+    description: "A model from Meta, fine-tuned for chat",
+    refUrl: "",
+    params: {
+      title: "Llama3.1-8b",
+      model: "meta-llama/llama-3.1-8b-instruct",
+      contextLength: 8192,
+    },
+    icon: "meta.png",
+    dimensions: [
+      {
+        name: "Parameter Count",
+        description: "The number of parameters in the model",
+        options: {
+          "8b": {
+            model: "meta-llama/llama-3.1-8b-instruct",
+            title: "Llama3.1-8b",
+          },
+        },
+      },
+    ],
+    providerOptions: ["novita"],
+    isOpenSource: true,
+  },
+  mistralChat: {
+    title: "Mistral Chat",
+    description:
+      "A series of open-weight models created by Mistral AI, highly competent for code generation and other tasks",
+    params: {
+      title: "Mistral",
+      model: "mistralai/mistral-7b-instruct",
+      contextLength: 4096,
+    },
+    dimensions: [
+      {
+        name: "Parameter Count",
+        description: "The number of parameters in the model",
+        options: {
+          "7b": {
+            model: "mistralai/mistral-7b-instruct",
+            title: "Mistral-7b",
+          },
+        },
+      },
+    ],
+    icon: "mistral.png",
+    providerOptions: ["novita"],
+    isOpenSource: true,
+  },
   llama31Chat: {
     title: "Llama3.1 Chat",
     description: "A model from Meta, fine-tuned for chat",
@@ -67,10 +173,9 @@ export const models: { [key: string]: ModelPackage } = {
       "together",
       "llama.cpp",
       "replicate",
-      "sambanova",
       "cerebras",
       "nebius",
-      "scaleway"
+      "scaleway",
     ],
     isOpenSource: true,
   },
@@ -169,6 +274,19 @@ export const models: { [key: string]: ModelPackage } = {
     icon: "deepseek.png",
     providerOptions: ["deepseek"],
     isOpenSource: false,
+  },
+  deepseekReasonerApi: {
+    title: "DeepSeek Reasoner",
+    description:
+      "An open-source reasoning model which generates a chain of thought to enhance the accuracy of its responses.",
+    params: {
+      title: "DeepSeek Reasoner",
+      model: "deepseek-reasoner",
+      contextLength: 64_000,
+    },
+    icon: "deepseek.png",
+    providerOptions: ["deepseek"],
+    isOpenSource: true,
   },
   deepseekCoder2Lite: {
     title: "DeepSeek Coder 2 Lite",
@@ -380,7 +498,20 @@ export const models: { [key: string]: ModelPackage } = {
       contextLength: 8192,
     },
     icon: "meta.png",
-    providerOptions: ["groq", "scaleway"],
+    providerOptions: ["groq", "scaleway", "nebius"],
+    isOpenSource: false,
+  },
+  llama3370bChat: {
+    title: "Llama3.3 70b Chat",
+    description: "A model from Meta, fine-tuned for chat",
+    refUrl: "",
+    params: {
+      title: "Llama3.3-70b",
+      model: "llama3.3-70b",
+      contextLength: 65536,
+    },
+    icon: "meta.png",
+    providerOptions: [],
     isOpenSource: false,
   },
   llama3170bChat: {
@@ -393,7 +524,7 @@ export const models: { [key: string]: ModelPackage } = {
       contextLength: 8192,
     },
     icon: "meta.png",
-    providerOptions: ["groq", "scaleway"],
+    providerOptions: ["groq", "scaleway", "nebius"],
     isOpenSource: false,
   },
   llama31405bChat: {
@@ -406,7 +537,7 @@ export const models: { [key: string]: ModelPackage } = {
       contextLength: 8192,
     },
     icon: "meta.png",
-    providerOptions: ["groq"],
+    providerOptions: ["groq", "nebius"],
     isOpenSource: false,
   },
   llama3170bNemotron: {
@@ -432,7 +563,7 @@ export const models: { [key: string]: ModelPackage } = {
       contextLength: 8192,
     },
     icon: "meta.png",
-    providerOptions: ["ollama", "groq", "llama.cpp", "sambanova"],
+    providerOptions: ["ollama", "groq", "llama.cpp", "sambanova", "nebius"],
     isOpenSource: false,
   },
   llama323bChat: {
@@ -742,6 +873,20 @@ export const models: { [key: string]: ModelPackage } = {
     providerOptions: ["gemini"],
     isOpenSource: false,
   },
+  gemini20Flash: {
+    title: "Gemini 2.0 Flash",
+    description:
+      "Google's powerful workhorse model with low latency and enhanced performance.",
+    params: {
+      title: "Gemini 2.0 Flash",
+      model: "gemini-2.0-flash",
+      contextLength: 1_000_000,
+      apiKey: "<API_KEY>",
+    },
+    icon: "gemini.png",
+    providerOptions: ["gemini"],
+    isOpenSource: false,
+  },
   commandR: {
     title: "Command R",
     description:
@@ -868,14 +1013,14 @@ export const models: { [key: string]: ModelPackage } = {
     icon: "anthropic.png",
     isOpenSource: false,
   },
-  claude3Haiku: {
-    title: "Claude 3 Haiku",
+  claude35Haiku: {
+    title: "Claude 3.5 Haiku",
     description:
-      "The third most capable model in the Claude 3 series: fastest and most compact model for near-instant responsiveness",
+      "The fastest model in the Claude 3.5 series: a compact model for near-instant responsiveness",
     params: {
-      model: "claude-3-haiku-20240307",
+      model: "claude-3-5-haiku-latest",
       contextLength: 200_000,
-      title: "Claude 3 Haiku",
+      title: "Claude 3.5 Haiku",
       apiKey: "",
     },
     providerOptions: ["anthropic", "free-trial"],
@@ -1053,10 +1198,10 @@ export const models: { [key: string]: ModelPackage } = {
     providerOptions: ["vertexai"],
     isOpenSource: false,
   },
-  gpt4gov: {
+  asksagegpt4gov: {
     title: "GPT-4 gov",
     description:
-      "U.S. Government. Most capable model today - which is similar to GPT-4o but approved for use by the U.S. Government.",
+      "U.S. Government. Most capable model today - which is similar to GPT-4 but approved for use by the U.S. Government.",
     params: {
       model: "gpt4-gov",
       contextLength: 128_000,
@@ -1068,20 +1213,157 @@ export const models: { [key: string]: ModelPackage } = {
     icon: "openai.png",
     isOpenSource: false,
   },
-  gpt4ogov: {
+  asksagegpt4ogov: {
     title: "GPT-4o gov",
     description:
       "U.S. Government. Most capable model today - which is similar to GPT-4o but approved for use by the U.S. Government.",
     params: {
       model: "gpt-4o-gov",
       contextLength: 128_000,
-      title: "GPT-4o",
+      title: "GPT-4o-gov",
       systemMessage:
         "You are an expert software developer. You give helpful and concise responses.", // Need to set this on the Ask Sage side or just configure it in here to be discussed
     },
     providerOptions: ["askSage"],
     icon: "openai.png",
     isOpenSource: false,
+  },
+  asksagegpt35gov: {
+    title: "GPT-3.5-Turbo gov",
+    description: "U.S. Government. Inexpensive and good ROI.",
+    params: {
+      model: "gpt-gov",
+      contextLength: 8096,
+      title: "GPT-3.5-Turbo gov",
+      systemMessage:
+        "You are an expert software developer. You give helpful and concise responses.", // Need to set this on the Ask Sage side or just configure it in here to be discussed
+    },
+    providerOptions: ["askSage"],
+    icon: "openai.png",
+    isOpenSource: false,
+  },
+  asksagegpt4ominigov: {
+    title: "GPT-4o-mini gov",
+    description:
+      "U.S. Government. Latest OpenAI GPT 4o-mini model. More inexpensive than GPT4. Capable of ingesting and analyzing images (JPG, PNG, GIF (20MB files max)). 16,384 token response max.",
+    params: {
+      model: "gpt-4o-mini-gov",
+      contextLength: 128_000,
+      title: "GPT-4o-mini gov",
+      systemMessage:
+        "You are an expert software developer. You give helpful and concise responses.", // Need to set this on the Ask Sage side or just configure it in here to be discussed
+    },
+    providerOptions: ["askSage"],
+    icon: "openai.png",
+    isOpenSource: false,
+  },
+  asksagegpt4: {
+    title: "GPT-4",
+    description:
+      "GPT4 is about 5X more expensive than Ask Sage tokens and 50X more expensive than GPT3.5",
+    params: {
+      model: "gpt4",
+      contextLength: 8_192,
+      title: "GPT-4",
+    },
+    providerOptions: ["openai"],
+    icon: "openai.png",
+    isOpenSource: false,
+  },
+  asksagegpt432: {
+    title: "GPT-4-32k",
+    description:
+      "The GPT-4-32k model is a variant of the GPT-4 model developed by OpenAI. It is designed to handle a larger context window, capable of processing up to 32,768 tokens, which makes it suitable for scenarios that require extensive information integration and data analysis",
+    params: {
+      model: "gpt4-32k",
+      contextLength: 32_768,
+      title: "GPT-4-32k",
+    },
+    providerOptions: ["openai"],
+    icon: "openai.png",
+    isOpenSource: false,
+  },
+  asksagegpto1: {
+    title: "GPT-o1",
+    description:
+      "Latest OpenAI GPT-o1 model. More inexpensive than GPT4. Capable of ingesting and analyzing images (JPG, PNG, GIF (20MB files max)).",
+    params: {
+      model: "gpt-o1",
+      contextLength: 128_000,
+      title: "GPT-o1",
+      systemMessage:
+        "You are an expert software developer. You give helpful and concise responses.",
+    },
+    providerOptions: ["askSage"],
+    icon: "openai.png",
+    isOpenSource: false,
+  },
+  asksagegpto1mini: {
+    title: "GPT-o1-mini",
+    description:
+      "Latest OpenAI GPT-o1-mini model. More inexpensive than GPT-o1. Capable of ingesting and analyzing images (JPG, PNG, GIF (20MB files max)). 16,384 token response max.",
+    params: {
+      model: "gpt-o1-mini",
+      contextLength: 128_000,
+      title: "GPT-o1-mini",
+      systemMessage:
+        "You are an expert software developer. You give helpful and concise responses.",
+    },
+    providerOptions: ["askSage"],
+    icon: "openai.png",
+    isOpenSource: false,
+  },
+  asksagegpto3mini: {
+    title: "GPT-o3-mini",
+    description:
+      "o3-mini can outperform o1 in coding and other reasoning tasks, and is 93% cheaper and has lower latency. It supports function calling, Structured Outputs, streaming, and developer messages. o3-mini comes with a larger context window of 200,000 tokens and a max output of 100,000 tokens",
+    params: {
+      model: "gpt-o3-mini",
+      contextLength: 200_000,
+      title: "GPT-o3-mini",
+      systemMessage:
+        "You are an expert software developer. You give helpful and concise responses.",
+    },
+    providerOptions: ["askSage"],
+    icon: "openai.png",
+    isOpenSource: false,
+  },
+  asksageclaude35gov: {
+    title: "Claude 3.5 Sonnet gov",
+    description:
+      "Anthropic's most intelligent model, but much less expensive than Claude 3 Opus",
+    params: {
+      model: "aws-bedrock-claude-35-sonnet-gov",
+      contextLength: 200_000,
+      title: "Claude 3.5 Sonnet gov",
+      systemMessage:
+        "You are an expert software developer. You give helpful and concise responses.",
+    },
+    providerOptions: ["askSage"],
+    icon: "anthropic.png",
+    isOpenSource: false,
+  },
+  asksagegroqllama33: {
+    title: "Llama 3.3",
+    description: "Llama-3.3 is a large language model customized by Groq.",
+    params: {
+      title: "Llama 3.3",
+      model: "groq-llama33",
+      contextLength: 128_000,
+    },
+    icon: "groq.png",
+    isOpenSource: true,
+  },
+  asksagegroq70b: {
+    title: "Groq-70B",
+    description: "A large language model customized by Groq.",
+    params: {
+      title: "Groq-70B",
+      model: "groq-70b",
+      contextLength: 8_192,
+    },
+    icon: "groq.png",
+    isOpenSource: true,
   },
   Qwen2Coder: {
     title: "Qwen 2.5 Coder 7b",
@@ -1105,7 +1387,7 @@ export const models: { [key: string]: ModelPackage } = {
         },
       },
     ],
-    providerOptions: ["nebius"],
+    providerOptions: ["nebius", "ncompass"],
     isOpenSource: true,
   },
   Qwen25Coder32b: {
@@ -1115,11 +1397,11 @@ export const models: { [key: string]: ModelPackage } = {
     params: {
       title: "Qwen 2.5 Coder 32b",
       model: "qwen2.5-coder-32b",
-      contextLength: 128_000,
+      contextLength: 32_000,
     },
     icon: "qwen.png",
-    providerOptions: ["scaleway"],
-    isOpenSource: true,    
+    providerOptions: ["scaleway", "nebius", "ncompass"],
+    isOpenSource: true,
   },
   grokBeta: {
     title: "Grok Beta",
@@ -1131,7 +1413,7 @@ export const models: { [key: string]: ModelPackage } = {
       contextLength: 128_000,
     },
     icon: "xAI.png",
-    providerOptions: ["xAI"],
+    providerOptions: ["xAI", "askSage"],
     isOpenSource: false,
   },
   gemma2_2b: {
@@ -1239,6 +1521,187 @@ export const models: { [key: string]: ModelPackage } = {
     },
     icon: "nvidia.png",
     providerOptions: ["siliconflow"],
+    isOpenSource: true,
+  },
+  llama3370BInstruct: {
+    title: "Llama 3.3 70B Instruct",
+    description: "A model from Meta, fine-tuned for chat",
+    params: {
+      title: "Llama 3.3 70B instruct",
+      model: "Meta-Llama-3.3-70B-Instruct",
+      contextLength: 16_000,
+    },
+    icon: "meta.png",
+    providerOptions: ["sambanova"],
+    isOpenSource: true,
+  },
+  llama318BInstruct: {
+    title: "Llama3.1 8B",
+    description: "A model from Meta, fine-tuned for chat",
+    refUrl: "",
+    params: {
+      title: "Llama 3.1 8B Instruct",
+      model: "Meta-Llama-3.1-8B-Instruct",
+      contextLength: 16_000,
+    },
+    icon: "meta.png",
+    providerOptions: ["sambanova"],
+    isOpenSource: true,
+  },
+  llama3170BInstruct: {
+    title: "Llama3.1 70B",
+    description: "A model from Meta, fine-tuned for chat",
+    refUrl: "",
+    params: {
+      title: "Llama 3.1 70B Instruct",
+      model: "Meta-Llama-3.1-70B-Instruct",
+      contextLength: 128_000,
+    },
+    icon: "meta.png",
+    providerOptions: ["sambanova"],
+    isOpenSource: true,
+  },
+  llama31405BInstruct: {
+    title: "Llama3.1 405B",
+    description: "A model from Meta, fine-tuned for chat",
+    refUrl: "",
+    params: {
+      title: "Llama 3.1 405B Instruct",
+      model: "Meta-Llama-3.1-405B-Instruct",
+      contextLength: 16_000,
+    },
+    icon: "meta.png",
+    providerOptions: ["sambanova"],
+    isOpenSource: true,
+  },
+  llama31Tulu3405B: {
+    title: "Llama3.1 Tulu 3405B",
+    description: "A model from Meta, fine-tuned for chat",
+    refUrl: "",
+    params: {
+      title: "Llama 3.1 Tulu 3 405B",
+      model: "Llama-3.1-Tulu-3-405B",
+      contextLength: 16_000,
+    },
+    icon: "allenai.png",
+    providerOptions: ["sambanova"],
+    isOpenSource: true,
+  },
+  llama321BInstruct: {
+    title: "Llama3.2 1B",
+    description: "A model from Meta, fine-tuned for chat",
+    refUrl: "",
+    params: {
+      title: "Llama 3.2 1B Instruct",
+      model: "Meta-Llama-3.2-1B-Instruct",
+      contextLength: 16_000,
+    },
+    icon: "meta.png",
+    providerOptions: ["sambanova"],
+    isOpenSource: true,
+  },
+  llama323BInstruct: {
+    title: "Llama3.2 3B",
+    description: "A model from Meta, fine-tuned for chat",
+    refUrl: "",
+    params: {
+      title: "Llama 3.2 3B Instruct",
+      model: "Meta-Llama-3.2-3B-Instruct",
+      contextLength: 8192,
+    },
+    icon: "meta.png",
+    providerOptions: ["sambanova"],
+    isOpenSource: true,
+  },
+  llama3211BInstruct: {
+    title: "Llama3.2 11B",
+    description: "A model from Meta, fine-tuned for multimodal chat with images",
+    refUrl: "",
+    params: {
+      title: "Llama 3.2 11B Vision Instruct",
+      model: "Llama-3.2-11B-Vision-Instruct",
+      contextLength: 4096,
+    },
+    icon: "meta.png",
+    providerOptions: ["sambanova"],
+    isOpenSource: true,
+  },
+  llama3290BInstruct: {
+    title: "Llama3.2 90B",
+    description: "A model from Meta, fine-tuned for multimodal chat with images",
+    refUrl: "",
+    params: {
+      title: "Llama 3.2 90B Vision Instruct",
+      model: "Llama-3.2-90B-Vision-Instruct",
+      contextLength: 4096,
+    },
+    icon: "meta.png",
+    providerOptions: ["sambanova"],
+    isOpenSource: true,
+  },
+  qwen25Coder32BInstruct: {
+    title: "Qwen 2.5 Coder 32B",
+    description:
+      "Qwen 2.5 coder is an auto-regressive language model that uses an optimized transformer architecture, fine-tuned for coding tasks.",
+    params: {
+      title: "Qwen2.5 Coder 32B Instruct",
+      model: "Qwen2.5-Coder-32B-Instruct",
+      contextLength: 16_000,
+    },
+    icon: "qwen.png",
+    providerOptions: ["sambanova"],
+    isOpenSource: true,
+  },
+  qwen2572BInstruct: {
+    title: "Qwen 2.5 72B",
+    description:
+      "Qwen 2.5 is an auto-regressive language model that uses an optimized transformer architecture.",
+    params: {
+      title: "Qwen2.5 72B Instruct",
+      model: "Qwen2.5-72B-Instruct",
+      contextLength: 16_000,
+    },
+    icon: "qwen.png",
+    providerOptions: ["sambanova"],
+    isOpenSource: true,
+  },
+  qwq32BPreview: {
+    title: "QwQ 32B Preview",
+    description:
+      "QwQ-32B-Preview is Qwen's latest experimental research model, focusing on improving AI reasoning capabilities.",
+    params: {
+      title: "QwQ 32B Preview",
+      model: "QwQ-32B-Preview",
+      contextLength: 16_000,
+    },
+    icon: "qwen.png",
+    providerOptions: ["sambanova"],
+    isOpenSource: true,
+  },
+  deepseekR1DistillLlama70B: {
+    title: "DeepSeek R1 Distill Llama 70B",
+    description:
+      "A llama 3.1 70 model distilled from deekseek R1",
+    params: {
+      title: "DeepSeek R1 Distill Llama 70B",
+      model: "DeepSeek-R1-Distill-Llama-70B",
+      contextLength: 32_000,
+    },
+    icon: "deepseek.png",
+    providerOptions: ["sambanova"],
+    isOpenSource: true,
+  },
+  deepseekR1: {
+    title: "DeepSeek R1",
+    description:
+      "DeekSeek R1 reasoning model from DeepSeek",
+    params: {
+      title: "DeepSeek R1",
+      model: "DeepSeek-R1",
+      contextLength: 8192,
+    },
+    icon: "deepseek.png",
+    providerOptions: ["sambanova"],
     isOpenSource: true,
   },
   AUTODETECT: {

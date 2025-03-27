@@ -1,11 +1,22 @@
 import { ChevronDownIcon } from "@heroicons/react/24/outline";
+import { inferResolvedUriFromRelativePath } from "core/util/ideUtils";
 import { debounce } from "lodash";
 import { useContext, useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 import { v4 as uuidv4 } from "uuid";
-import { defaultBorderRadius, lightGray, vscEditorBackground } from "../..";
+import {
+  defaultBorderRadius,
+  vscCommandCenterInactiveBorder,
+  vscEditorBackground,
+} from "../..";
 import { IdeMessengerContext } from "../../../context/IdeMessenger";
 import { useWebviewListener } from "../../../hooks/useWebviewListener";
+import { useAppSelector } from "../../../redux/hooks";
+import { selectDefaultModel } from "../../../redux/slices/configSlice";
+import {
+  selectApplyStateByStreamId,
+  selectIsInEditMode,
+} from "../../../redux/slices/sessionSlice";
 import { getFontSize } from "../../../util";
 import { childrenToText, isTerminalCodeBlock } from "../utils";
 import ApplyActions from "./ApplyActions";
@@ -13,15 +24,9 @@ import CopyButton from "./CopyButton";
 import FileInfo from "./FileInfo";
 import GeneratingCodeLoader from "./GeneratingCodeLoader";
 import RunInTerminalButton from "./RunInTerminalButton";
-import { useAppSelector } from "../../../redux/hooks";
-import { selectDefaultModel } from "../../../redux/slices/configSlice";
-import {
-  selectApplyStateByStreamId,
-  selectIsInEditMode,
-} from "../../../redux/slices/sessionSlice";
 
 const TopDiv = styled.div`
-  outline: 1px solid rgba(153, 153, 152);
+  outline: 1px solid ${vscCommandCenterInactiveBorder};
   outline-offset: -0.5px;
   border-radius: ${defaultBorderRadius};
   margin-bottom: 8px !important;
@@ -38,13 +43,13 @@ const ToolbarDiv = styled.div<{ isExpanded: boolean }>`
   padding: 4px 6px;
   margin: 0;
   border-bottom: ${({ isExpanded }) =>
-    isExpanded ? `0.5px solid ${lightGray}80` : "inherit"};
+    isExpanded ? `1px solid ${vscCommandCenterInactiveBorder}` : "inherit"};
 `;
 
 export interface StepContainerPreToolbarProps {
   codeBlockContent: string;
-  language: string;
-  filepath: string;
+  language: string | null;
+  relativeFilepath: string;
   isGeneratingCodeBlock: boolean;
   codeBlockIndex: number; // To track which codeblock we are applying
   range?: string;
@@ -84,17 +89,23 @@ export default function StepContainerPreToolbar(
     : props.isGeneratingCodeBlock;
 
   const isNextCodeBlock = nextCodeBlockIndex === props.codeBlockIndex;
-  const hasFileExtension = /\.[0-9a-z]+$/i.test(props.filepath);
+  const hasFileExtension = /\.[0-9a-z]+$/i.test(props.relativeFilepath);
 
   const defaultModel = useAppSelector(selectDefaultModel);
 
-  function onClickApply() {
+  async function onClickApply() {
     if (!defaultModel) {
       return;
     }
+
+    let fileUri = await inferResolvedUriFromRelativePath(
+      props.relativeFilepath,
+      ideMessenger.ide,
+    );
+
     ideMessenger.post("applyToFile", {
       streamId: streamIdRef.current,
-      filepath: props.filepath,
+      filepath: fileUri,
       text: codeBlockContent,
       curSelectedModelTitle: defaultModel.title,
     });
@@ -124,29 +135,38 @@ export default function StepContainerPreToolbar(
     }
   }, [props.children, codeBlockContent]);
 
-  useEffect(() => {
-    const hasCompletedGenerating =
-      wasGeneratingRef.current && !isGeneratingCodeBlock;
+  // Temporarily disabling auto apply for Edit mode
+  // useEffect(() => {
+  //   const hasCompletedGenerating =
+  //     wasGeneratingRef.current && !isGeneratingCodeBlock;
 
-    const shouldAutoApply = hasCompletedGenerating && isInEditMode;
+  //   const shouldAutoApply = hasCompletedGenerating && isInEditMode;
 
-    if (shouldAutoApply) {
-      onClickApply();
-    }
+  //   if (shouldAutoApply) {
+  //     onClickApply();
+  //   }
 
-    wasGeneratingRef.current = isGeneratingCodeBlock;
-  }, [isGeneratingCodeBlock]);
+  //   wasGeneratingRef.current = isGeneratingCodeBlock;
+  // }, [isGeneratingCodeBlock]);
 
-  function onClickAcceptApply() {
+  async function onClickAcceptApply() {
+    const fileUri = await inferResolvedUriFromRelativePath(
+      props.relativeFilepath,
+      ideMessenger.ide,
+    );
     ideMessenger.post("acceptDiff", {
-      filepath: props.filepath,
+      filepath: fileUri,
       streamId: streamIdRef.current,
     });
   }
 
-  function onClickRejectApply() {
+  async function onClickRejectApply() {
+    const fileUri = await inferResolvedUriFromRelativePath(
+      props.relativeFilepath,
+      ideMessenger.ide,
+    );
     ideMessenger.post("rejectDiff", {
-      filepath: props.filepath,
+      filepath: fileUri,
       streamId: streamIdRef.current,
     });
   }
@@ -167,12 +187,15 @@ export default function StepContainerPreToolbar(
         <div className="flex min-w-0 max-w-[45%] items-center">
           <ChevronDownIcon
             onClick={onClickExpand}
-            className={`h-3.5 w-3.5 shrink-0 cursor-pointer text-gray-400 transition-colors hover:bg-white/10 ${
+            className={`h-3.5 w-3.5 shrink-0 cursor-pointer text-gray-400 hover:brightness-125 ${
               isExpanded ? "rotate-0" : "-rotate-90"
             }`}
           />
           <div className="w-full min-w-0">
-            <FileInfo filepath={props.filepath} range={props.range} />
+            <FileInfo
+              relativeFilepath={props.relativeFilepath}
+              range={props.range}
+            />
           </div>
         </div>
 
@@ -206,7 +229,7 @@ export default function StepContainerPreToolbar(
       {isExpanded && (
         <div
           className={`overflow-hidden overflow-y-auto ${
-            isExpanded ? "max-h-[400px] opacity-100" : "max-h-0 opacity-0"
+            isExpanded ? "opacity-100" : "max-h-0 opacity-0"
           }`}
         >
           {props.children}

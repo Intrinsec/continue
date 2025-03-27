@@ -35,11 +35,14 @@ import Mistral from "./Mistral";
 import MockLLM from "./Mock";
 import Moonshot from "./Moonshot";
 import Msty from "./Msty";
+import NCompass from "./NCompass";
 import Nebius from "./Nebius";
+import Novita from "./Novita";
 import Nvidia from "./Nvidia";
 import Ollama from "./Ollama";
 import OpenAI from "./OpenAI";
 import OpenRouter from "./OpenRouter";
+import { Relace } from "./Relace";
 import Replicate from "./Replicate";
 import SageMaker from "./SageMaker";
 import SambaNova from "./SambaNova";
@@ -67,6 +70,7 @@ export const LLMClasses = [
   Replicate,
   TextGenWebUI,
   Together,
+  Novita,
   HuggingFaceTGI,
   HuggingFaceInferenceAPI,
   Kindo,
@@ -81,6 +85,7 @@ export const LLMClasses = [
   Flowise,
   Groq,
   Fireworks,
+  NCompass,
   ContinueProxy,
   Cloudflare,
   Deepseek,
@@ -100,6 +105,7 @@ export const LLMClasses = [
   xAI,
   SiliconFlow,
   Scaleway,
+  Relace,
 ];
 
 export async function llmFromDescription(

@@ -1,5 +1,5 @@
 package com.github.continuedev.continueintellijextension.activities
-
+import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.github.continuedev.continueintellijextension.auth.AuthListener
 import com.github.continuedev.continueintellijextension.auth.ContinueAuthService
 import com.github.continuedev.continueintellijextension.auth.ControlPlaneSessionInfo
@@ -9,7 +9,7 @@ import com.github.continuedev.continueintellijextension.listeners.ContinuePlugin
 import com.github.continuedev.continueintellijextension.services.ContinueExtensionSettings
 import com.github.continuedev.continueintellijextension.services.ContinuePluginService
 import com.github.continuedev.continueintellijextension.services.SettingsListener
-import com.intellij.openapi.Disposable
+import com.github.continuedev.continueintellijextension.utils.toUriOrNull
 import com.intellij.openapi.actionSystem.KeyboardShortcut
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ApplicationNamesInfo
@@ -35,6 +35,9 @@ import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileDeleteEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileContentChangeEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileCreateEvent
+import com.intellij.ide.ui.LafManagerListener
+import com.intellij.openapi.vfs.VirtualFile
 
 fun showTutorial(project: Project) {
     val tutorialFileName = getTutorialFileName()
@@ -45,7 +48,15 @@ fun showTutorial(project: Project) {
                 throw IOException("Resource not found: $tutorialFileName")
             }
             var content = StreamUtil.readText(`is`, StandardCharsets.UTF_8)
+
+            // All jetbrains will use J instead of L
+            content = content.replace("[Cmd + L]", "[Cmd + J]")
+            content = content.replace("[Cmd + Shift + L]", "[Cmd + Shift + J]")
+
             if (!System.getProperty("os.name").lowercase().contains("mac")) {
+                content = content.replace("[Cmd + J]", "[Ctrl + J]")
+                content = content.replace("[Cmd + Shift + J]", "[Ctrl + Shift + J]")
+                content = content.replace("[Cmd + I]", "[Ctrl + I]")
                 content = content.replace("⌘", "⌃")
             }
             val filepath = Paths.get(getContinueGlobalPath(), tutorialFileName).toString()
@@ -129,10 +140,12 @@ class ContinuePluginStartupActivity : StartupActivity, DumbAware {
             val ideProtocolClient = IdeProtocolClient(
                 continuePluginService,
                 coroutineScope,
-                project.basePath,
                 project
             )
 
+            val diffManager = DiffManager(project)
+
+            continuePluginService.diffManager = diffManager
             continuePluginService.ideProtocolClient = ideProtocolClient
 
             // Listen to changes to settings so the core can reload remote configuration
@@ -156,23 +169,62 @@ class ContinuePluginStartupActivity : StartupActivity, DumbAware {
             // Handle file changes and deletions - reindex
             connection.subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
                 override fun after(events: List<VFileEvent>) {
-                    // Collect all relevant paths for deletions
-                    val deletedPaths = events.filterIsInstance<VFileDeleteEvent>()
-                        .map { event -> event.file.path.split("/").dropLast(1).joinToString("/") }
+                    // Collect all relevant URIs for deletions
+                    val deletedURIs = events.filterIsInstance<VFileDeleteEvent>()
+                        .mapNotNull { event -> event.file.toUriOrNull() }
 
-                    // Collect all relevant paths for content changes
-                    val changedPaths = events.filterIsInstance<VFileContentChangeEvent>()
-                        .map { event -> event.file.path.split("/").dropLast(1).joinToString("/") }
+                    // Send "files/deleted" message if there are any deletions
+                    if (deletedURIs.isNotEmpty()) {
+                        val data = mapOf("uris" to deletedURIs)
+                        continuePluginService.coreMessenger?.request("files/deleted", data, null) { _ -> }
+                    }
 
-                    // Combine both lists of paths for re-indexing
-                    val allPaths = deletedPaths + changedPaths
+                    // Collect all relevant URIs for content changes
+                    val changedURIs = events.filterIsInstance<VFileContentChangeEvent>()
+                        .mapNotNull { event -> event.file.toUriOrNull() }
 
-                    // Create a data map if there are any paths to re-index
-                    if (allPaths.isNotEmpty()) {
-                        val data = mapOf("files" to allPaths)
-                        continuePluginService.coreMessenger?.request("index/forceReIndexFiles", data, null) { _ -> }
+                    // Notify core of content changes
+                    if (changedURIs.isNotEmpty()) {
+                        val data = mapOf("uris" to changedURIs)
+                        continuePluginService.coreMessenger?.request("files/changed", data, null) { _ -> }
+                    }
+
+                    events.filterIsInstance<VFileCreateEvent>()
+                        .mapNotNull { event -> event.file?.toUriOrNull() }
+                        .takeIf { it.isNotEmpty() }?.let {
+                            val data = mapOf("uris" to it)
+                            continuePluginService.coreMessenger?.request("files/created", data, null) { _ -> }
+                        }
+
+                    // TODO: Missing handling of copying files, renaming files, etc.
+                }
+            })
+
+
+            connection.subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, object : FileEditorManagerListener {
+                override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
+                    file.toUriOrNull()?.let { uri ->
+                        val data = mapOf("uris" to listOf(uri))
+                        continuePluginService.coreMessenger?.request("files/closed", data, null) { _ -> }
                     }
                 }
+                override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
+                    file.toUriOrNull()?.let { uri ->
+                        val data = mapOf("uris" to listOf(uri))
+                        continuePluginService.coreMessenger?.request("files/opened", data, null) { _ -> }
+                    }
+                }
+            })
+
+
+
+            // Listen for theme changes
+            connection.subscribe(LafManagerListener.TOPIC, LafManagerListener {
+                val colors = GetTheme().getTheme();
+                continuePluginService.sendToWebview(
+                    "jetbrains/setColors",
+                    colors
+                )
             })
 
             // Listen for clicking settings button to start the auth flow
@@ -189,7 +241,7 @@ class ContinuePluginStartupActivity : StartupActivity, DumbAware {
 
             connection.subscribe(AuthListener.TOPIC, object : AuthListener {
                 override fun startAuthFlow() {
-                    authService.startAuthFlow(project)
+                    authService.startAuthFlow(project, false)
                 }
 
                 override fun handleUpdatedSessionInfo(sessionInfo: ControlPlaneSessionInfo?) {
@@ -213,12 +265,10 @@ class ContinuePluginStartupActivity : StartupActivity, DumbAware {
             // Reload the WebView
             continuePluginService?.let { pluginService ->
                 val allModulePaths = ModuleManager.getInstance(project).modules
-                    .flatMap { module -> ModuleRootManager.getInstance(module).contentRoots.map { it.path } }
-                    .map { Paths.get(it).normalize() }
+                    .flatMap { module -> ModuleRootManager.getInstance(module).contentRoots.mapNotNull { it.toUriOrNull() } }
 
                 val topLevelModulePaths = allModulePaths
                     .filter { modulePath -> allModulePaths.none { it != modulePath && modulePath.startsWith(it) } }
-                    .map { it.toString() }
 
                 pluginService.workspacePaths = topLevelModulePaths.toTypedArray()
             }

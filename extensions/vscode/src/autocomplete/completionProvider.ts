@@ -1,18 +1,21 @@
 import { CompletionProvider } from "core/autocomplete/CompletionProvider";
+import { processSingleLineCompletion } from "core/autocomplete/util/processSingleLineCompletion";
 import {
   type AutocompleteInput,
   type AutocompleteOutcome,
 } from "core/autocomplete/util/types";
 import { ConfigHandler } from "core/config/ConfigHandler";
+import { startLocalOllama } from "core/util/ollamaHelper";
+import * as URI from "uri-js";
 import { v4 as uuidv4 } from "uuid";
 import * as vscode from "vscode";
-const Diff = require("diff");
 
 import { showFreeTrialLoginMessage } from "../util/messages";
 import { VsCodeWebviewProtocol } from "../webviewProtocol";
 
 import { getDefinitionsFromLsp } from "./lsp";
 import { RecentlyEditedTracker } from "./recentlyEdited";
+import { RecentlyVisitedRangesService } from "./RecentlyVisitedRangesService";
 import {
   StatusBarStatus,
   getStatusBarStatus,
@@ -21,14 +24,7 @@ import {
 } from "./statusBar";
 
 import type { IDE } from "core";
-import type { TabAutocompleteModel } from "../util/loadAutocompleteModel";
-
-interface DiffType {
-  count: number;
-  added: boolean;
-  removed: boolean;
-  value: string;
-}
+import { handleLLMError } from "../util/errorHandling";
 
 interface VsCodeCompletionInput {
   document: vscode.TextDocument;
@@ -37,17 +33,15 @@ interface VsCodeCompletionInput {
 }
 
 export class ContinueCompletionProvider
-  implements vscode.InlineCompletionItemProvider
-{
+  implements vscode.InlineCompletionItemProvider {
   private onError(e: any) {
-    const options = ["Documentation"];
-    if (e.message.includes("https://ollama.ai")) {
-      options.push("Download Ollama");
+    if (handleLLMError(e)) {
+      return;
     }
-
-    if (e.message.includes("Please sign in with GitHub")) {
+    let message = e.message;
+    if (message.includes("Please sign in with GitHub")) {
       showFreeTrialLoginMessage(
-        e.message,
+        message,
         this.configHandler.reloadConfig.bind(this.configHandler),
         () => {
           void this.webviewProtocol.request("openOnboardingCard", undefined);
@@ -55,46 +49,45 @@ export class ContinueCompletionProvider
       );
       return;
     }
-    vscode.window.showErrorMessage(e.message, ...options).then((val) => {
+    vscode.window.showErrorMessage(message, "Documentation").then((val) => {
       if (val === "Documentation") {
         vscode.env.openExternal(
           vscode.Uri.parse(
             "https://docs.continue.dev/features/tab-autocomplete",
           ),
         );
-      } else if (val === "Download Ollama") {
-        vscode.env.openExternal(vscode.Uri.parse("https://ollama.ai/download"));
       }
     });
   }
 
   private completionProvider: CompletionProvider;
+  private recentlyVisitedRanges: RecentlyVisitedRangesService;
   private recentlyEditedTracker = new RecentlyEditedTracker();
 
   constructor(
     private readonly configHandler: ConfigHandler,
     private readonly ide: IDE,
-    private readonly tabAutocompleteModel: TabAutocompleteModel,
     private readonly webviewProtocol: VsCodeWebviewProtocol,
   ) {
+    async function getAutocompleteModel() {
+      const { config } = await configHandler.loadConfig();
+      if (!config) {
+        return;
+      }
+      return config.selectedModelByRole.autocomplete ?? undefined;
+    }
     this.completionProvider = new CompletionProvider(
       this.configHandler,
       this.ide,
-      this.tabAutocompleteModel.get.bind(this.tabAutocompleteModel),
+      getAutocompleteModel,
       this.onError.bind(this),
       getDefinitionsFromLsp,
     );
-
-    vscode.workspace.onDidChangeTextDocument((event) => {
-      if (event.document.uri.fsPath === this._lastShownCompletion?.filepath) {
-        // console.log("updating completion");
-      }
-    });
+    this.recentlyVisitedRanges = new RecentlyVisitedRangesService(ide);
   }
 
   _lastShownCompletion: AutocompleteOutcome | undefined;
 
-  _lastVsCodeCompletionInput: VsCodeCompletionInput | undefined;
 
   public async provideInlineCompletionItems(
     document: vscode.TextDocument,
@@ -119,52 +112,26 @@ export class ContinueCompletionProvider
       return null;
     }
 
-    // If the text at the range isn't a prefix of the intellisense text,
-    // no completion will be displayed, regardless of what we return
-    if (
-      context.selectedCompletionInfo &&
-      !context.selectedCompletionInfo.text.startsWith(
-        document.getText(context.selectedCompletionInfo.range),
-      )
-    ) {
-      return null;
-    }
-
-    let injectDetails: string | undefined = undefined;
-    // Here we could use the details from the intellisense dropdown
-    // and place them just above the line being typed but because
-    // we don't have control over the formatting of the details and
-    // they could be especially long, not doing this for now
-    // if (context.selectedCompletionInfo) {
-    //   const results: any = await vscode.commands.executeCommand(
-    //     "vscode.executeCompletionItemProvider",
-    //     document.uri,
-    //     position,
-    //     null,
-    //     1,
-    //   );
-    //   if (results?.items) {
-    //     injectDetails = results.items?.[0]?.detail;
-    //     // const label = results?.items?.[0].label;
-    //     // const workspaceSymbols = (
-    //     //   (await vscode.commands.executeCommand(
-    //     //     "vscode.executeWorkspaceSymbolProvider",
-    //     //     label,
-    //     //   )) as any
-    //     // ).filter((symbol: any) => symbol.name === label);
-    //     // console.log(label, "=>", workspaceSymbols);
-    //   }
-    // }
-
-    // The first time intellisense dropdown shows up, and the first choice is selected,
-    // we should not consider this. Only once user explicitly moves down the list
-    const newVsCodeInput = {
-      context,
-      document,
-      position,
-    };
     const selectedCompletionInfo = context.selectedCompletionInfo;
-    this._lastVsCodeCompletionInput = newVsCodeInput;
+
+    // This code checks if there is a selected completion suggestion in the given context and ensures that it is valid
+    // To improve the accuracy of suggestions it checks if the user has typed at least 4 characters
+    // This helps refine and filter out irrelevant autocomplete options
+    if (selectedCompletionInfo) {
+      const { text, range } = selectedCompletionInfo;
+      const typedText = document.getText(range);
+
+      const typedLength = range.end.character - range.start.character;
+
+      if (typedLength < 4) {
+        return null;
+      }
+
+      if (!text.startsWith(typedText)) {
+        return null;
+      }
+    }
+    let injectDetails: string | undefined = undefined;
 
     try {
       const abortController = new AbortController();
@@ -181,7 +148,9 @@ export class ContinueCompletionProvider
         const notebook = vscode.workspace.notebookDocuments.find((notebook) =>
           notebook
             .getCells()
-            .some((cell) => cell.document.uri === document.uri),
+            .some((cell) =>
+              URI.equal(cell.document.uri.toString(), document.uri.toString()),
+            ),
         );
         if (notebook) {
           const cells = notebook.getCells();
@@ -196,7 +165,9 @@ export class ContinueCompletionProvider
             })
             .join("\n\n");
           for (const cell of cells) {
-            if (cell.document.uri === document.uri) {
+            if (
+              URI.equal(cell.document.uri.toString(), document.uri.toString())
+            ) {
               break;
             } else {
               pos.line += cell.document.getText().split("\n").length + 1;
@@ -206,7 +177,6 @@ export class ContinueCompletionProvider
       }
 
       // Manually pass file contents for unsaved, untitled files
-      let filepath = document.uri.fsPath;
       if (document.isUntitled) {
         manuallyPassFileContents = document.getText();
       }
@@ -215,17 +185,17 @@ export class ContinueCompletionProvider
       let manuallyPassPrefix: string | undefined = undefined;
 
       const input: AutocompleteInput = {
-        isUntitledFile: document.isUntitled,
-        completionId: uuidv4(),
-        filepath,
         pos,
-        recentlyEditedFiles: [],
-        recentlyEditedRanges:
-          await this.recentlyEditedTracker.getRecentlyEditedRanges(),
         manuallyPassFileContents,
         manuallyPassPrefix,
         selectedCompletionInfo,
         injectDetails,
+        isUntitledFile: document.isUntitled,
+        completionId: uuidv4(),
+        filepath: document.uri.toString(),
+        recentlyVisitedRanges: this.recentlyVisitedRanges.getSnippets(),
+        recentlyEditedRanges:
+          await this.recentlyEditedTracker.getRecentlyEditedRanges(),
       };
 
       setupStatusBar(undefined, true);
@@ -276,54 +246,29 @@ export class ContinueCompletionProvider
       const isSingleLineCompletion = outcome.completion.split("\n").length <= 1;
 
       if (isSingleLineCompletion) {
-        const lastLineOfCompletionText = completionText.split("\n").pop();
+        const lastLineOfCompletionText = completionText.split("\n").pop() || "";
         const currentText = document
           .lineAt(startPos)
           .text.substring(startPos.character);
-        const diffs: DiffType[] = Diff.diffWords(
-          currentText,
+
+        const result = processSingleLineCompletion(
           lastLineOfCompletionText,
+          currentText,
+          startPos.character
         );
 
-        if (diffPatternMatches(diffs, ["+"])) {
-          // Just insert, we're already at the end of the line
-        } else if (
-          diffPatternMatches(diffs, ["+", "="]) ||
-          diffPatternMatches(diffs, ["+", "=", "+"])
-        ) {
-          // The model repeated the text after the cursor to the end of the line
-          range = new vscode.Range(
-            startPos,
-            document.lineAt(startPos).range.end,
-          );
-        } else if (
-          diffPatternMatches(diffs, ["+", "-"]) ||
-          diffPatternMatches(diffs, ["-", "+"])
-        ) {
-          // We are midline and the model just inserted without repeating to the end of the line
-          // We want to move the cursor to the end of the line
-          // range = new vscode.Range(
-          //   startPos,
-          //   document.lineAt(startPos).range.end,
-          // );
-          // // Find the last removed part of the diff
-          // const lastRemovedIndex = findLastIndex(
-          //   diffs,
-          //   (diff) => diff.removed === true,
-          // );
-          // const lastRemovedContent = diffs[lastRemovedIndex].value;
-          // completionText += lastRemovedContent;
-        } else {
-          // Diff is too complicated, just insert the first added part of the diff
-          // This is the safe way to ensure that it is displayed
-          if (diffs[0]?.added) {
-            completionText = diffs[0].value;
-          } else {
-            // If the first part of the diff isn't an insertion, then the model is
-            // probably rewriting other parts of the line
-            return undefined;
-          }
+        if (result === undefined) {
+          return undefined;
         }
+
+        completionText = result.completionText;
+        if (result.range) {
+          range = new vscode.Range(
+            new vscode.Position(startPos.line, result.range.start),
+            new vscode.Position(startPos.line, result.range.end)
+          );
+        }
+
       } else {
         // Extend the range to the end of the line for multiline completions
         range = new vscode.Range(startPos, document.lineAt(startPos).range.end);
@@ -369,27 +314,4 @@ export class ContinueCompletionProvider
 
     return true;
   }
-}
-
-type DiffPartType = "+" | "-" | "=";
-
-function diffPatternMatches(
-  diffs: DiffType[],
-  pattern: DiffPartType[],
-): boolean {
-  if (diffs.length !== pattern.length) {
-    return false;
-  }
-
-  for (let i = 0; i < diffs.length; i++) {
-    const diff = diffs[i];
-    const diffPartType: DiffPartType =
-      !diff.added && !diff.removed ? "=" : diff.added ? "+" : "-";
-
-    if (diffPartType !== pattern[i]) {
-      return false;
-    }
-  }
-
-  return true;
 }

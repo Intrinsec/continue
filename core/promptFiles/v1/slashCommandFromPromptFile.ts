@@ -1,35 +1,14 @@
-import * as YAML from "yaml";
-
 import { ContinueSDK, SlashCommand } from "../..";
-import { getBasename } from "../../util/index";
 import { renderChatMessage } from "../../util/messageContent";
+import { getLastNPathParts } from "../../util/uri";
+import { parsePromptFileV1V2 } from "../v2/parsePromptFileV1V2";
 
 import { getContextProviderHelpers } from "./getContextProviderHelpers";
 import { renderTemplatedString } from "./renderTemplatedString";
 import { updateChatHistory } from "./updateChatHistory";
 
 export function extractName(preamble: { name?: string }, path: string): string {
-  return preamble.name ?? getBasename(path).split(".prompt")[0];
-}
-
-export function parsePromptFile(path: string, content: string) {
-  let [preambleRaw, prompt] = content.split("\n---\n");
-  if (prompt === undefined) {
-    prompt = preambleRaw;
-    preambleRaw = "";
-  }
-
-  const preamble = YAML.parse(preambleRaw) ?? {};
-  const name = extractName(preamble, path);
-  const description = preamble.description ?? name;
-
-  let systemMessage: string | undefined = undefined;
-  if (prompt.includes("<system>")) {
-    systemMessage = prompt.split("<system>")[1].split("</system>")[0].trim();
-    prompt = prompt.split("</system>")[1].trim();
-  }
-
-  return { name, description, systemMessage, prompt };
+  return preamble.name ?? getLastNPathParts(path, 1).split(".prompt")[0];
 }
 
 export function extractUserInput(input: string, commandName: string): string {
@@ -39,26 +18,28 @@ export function extractUserInput(input: string, commandName: string): string {
   return input;
 }
 
-export async function getDefaultVariables(
-  context: ContinueSDK,
-  userInput: string,
-): Promise<Record<string, string>> {
-  const currentFile = await context.ide.getCurrentFile();
-  const vars: Record<string, string> = { input: userInput };
-  if (currentFile) {
-    vars.currentFile = currentFile.path;
-  }
-  return vars;
-}
-
-export async function renderPrompt(
+async function renderPromptV1(
   prompt: string,
   context: ContinueSDK,
   userInput: string,
 ) {
   const helpers = getContextProviderHelpers(context);
 
-  const inputData = await getDefaultVariables(context, userInput);
+  const inputData: Record<string, string> = {
+    input: userInput,
+  };
+
+  // A few context providers that don't need to be in config.json to work in .prompt files
+  if (helpers?.find((helper) => helper[0] === "diff")) {
+    const diff = await context.ide.getDiff(true);
+    inputData.diff = diff.join("\n");
+  }
+  if (helpers?.find((helper) => helper[0] === "currentFile")) {
+    const currentFile = await context.ide.getCurrentFile();
+    if (currentFile) {
+      inputData.currentFile = currentFile.path;
+    }
+  }
 
   return renderTemplatedString(
     prompt,
@@ -68,11 +49,11 @@ export async function renderPrompt(
   );
 }
 
-export function slashCommandFromPromptFile(
+export function slashCommandFromPromptFileV1(
   path: string,
   content: string,
-): SlashCommand {
-  const { name, description, systemMessage, prompt } = parsePromptFile(
+): SlashCommand | null {
+  const { name, description, systemMessage, prompt } = parsePromptFileV1V2(
     path,
     content,
   );
@@ -80,9 +61,13 @@ export function slashCommandFromPromptFile(
   return {
     name,
     description,
+    prompt,
     run: async function* (context) {
+      const originalSystemMessage = context.llm.systemMessage;
+      context.llm.systemMessage = systemMessage;
+
       const userInput = extractUserInput(context.input, name);
-      const renderedPrompt = await renderPrompt(prompt, context, userInput);
+      const renderedPrompt = await renderPromptV1(prompt, context, userInput);
       const messages = updateChatHistory(
         context.history,
         name,
@@ -93,9 +78,12 @@ export function slashCommandFromPromptFile(
       for await (const chunk of context.llm.streamChat(
         messages,
         new AbortController().signal,
+        context.completionOptions,
       )) {
         yield renderChatMessage(chunk);
       }
+
+      context.llm.systemMessage = originalSystemMessage;
     },
   };
 }

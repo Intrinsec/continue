@@ -2,21 +2,21 @@
 title: Prompt files
 ---
 
-Prompt files provide a convenient way to standardize common patterns and share a collection of LLM prompts with your team. They make it easy to build and use these prompts.
+Prompt files allow you to build and use local prompts, and provide a convenient way to test and iterate on prompts before publishing them to the Hub.
+
+:::info
+Visit the Hub to [explore prompts](https://hub.continue.dev/explore/prompts) or [create your own](https://hub.continue.dev/new?type=block&blockType=prompts)
+:::
 
 ## Quick start
 
-<!-- :::tip[Prompt library]
-To assist you in getting started, [we've curated a small library of `.prompt` files](https://github.com/continuedev/prompt-file-examples). We encourage community contributions to this repository, so please consider opening up a pull request with your own prompts!
-::: -->
-
-Below is a quick example of setting up a prompt file to de
+Below is a quick example of setting up a prompt file:
 
 1. Create a folder called `.continue/prompts` at the top level of your workspace (or you can use the button in the UI by typing @, selecting "Prompt Files", and selecting "New Prompt File").
 2. Add a file called `rails.prompt` to this folder.
 3. Write the following contents to `rails.prompt` and save.
 
-```
+```.prompt
 name: Rails Project
 description: Information about this project
 ---
@@ -25,7 +25,7 @@ Attached is a summary of the current Ruby on Rails application, including the @G
 
 Now to use this prompt, you can highlight code and use <kbd>cmd/ctrl</kbd> + <kbd>L</kbd> to select it in the Continue sidebar.
 
-Then, type "@", select "Prompt files", and choose the one called "Rails Project". You can now ask any question as usual and the LLM will have the information from your .prompt file.
+Then, type <kbd>/</kbd> and choose the "Rails Project" prompt. You can now ask any question as usual and the LLM will have the information from your .prompt file.
 
 ## Format
 
@@ -47,11 +47,22 @@ If you don't need any of these parameters, you can leave out the preamble and do
 
 ### Context
 
-Many [context provider](../context-providers.md) can be referenced by typing "@" followed by the name of the context provider.
+Many [context provider](../context-providers.mdx) can be referenced by typing "@" followed by the name of the context provider. The currently supported list is:
 
 - `@terminal` - The contents of the terminal
+- `@currentFile` - The currently active file
+- `@open` - All open files
+- `@os` - Information about the operating system
+- `@problems` - Problems reported by the language server in the active file
+- `@repo-map` - A map of files in the repository
+- `@tree` - A tree view of the repository structure
+
+Or you can directly type URLs and file paths:
+
 - `@https://github.com/continuedev/continue` - The contents of a URL
 - `@src/index.ts` - The contents of a file (VS Code only)
+
+All references will be attached as context items, rather than injected directly inline.
 
 ## Feedback
 

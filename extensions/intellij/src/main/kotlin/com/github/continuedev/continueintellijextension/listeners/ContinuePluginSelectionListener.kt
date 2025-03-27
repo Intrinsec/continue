@@ -28,6 +28,10 @@ class ContinuePluginSelectionListener(
     private var lastActiveEditor: Editor? = null
 
     override fun selectionChanged(e: SelectionEvent) {
+        if (e.editor.isDisposed || e.editor.project?.isDisposed == true) {
+            return
+        }
+
         debouncer.debounce { handleSelection(e) }
     }
 
@@ -42,12 +46,12 @@ class ContinuePluginSelectionListener(
 
 
     private fun handleSelection(e: SelectionEvent) {
-        ApplicationManager.getApplication().runReadAction {
+        ApplicationManager.getApplication().invokeLater {
             val editor = e.editor
 
             if (!isFileEditor(editor)) {
                 removeAllTooltips()
-                return@runReadAction
+                return@invokeLater
             }
 
             // Fixes a bug where the tooltip isn't being disposed of when opening new files
@@ -61,7 +65,7 @@ class ContinuePluginSelectionListener(
 
             if (shouldRemoveTooltip(selectedText, editor)) {
                 removeExistingTooltips(editor)
-                return@runReadAction
+                return@invokeLater
             }
 
             updateTooltip(editor, model)
@@ -106,6 +110,19 @@ class ContinuePluginSelectionListener(
             ApplicationManager.getApplication().invokeLater {
                 val document = editor.document
                 val (startLine, endLine, isFullLineSelection) = getSelectionInfo(model, document)
+
+                // Check if entire file is selected
+                val isEntireFileSelected = model.selectionStart == 0 &&
+                        model.selectionEnd == document.textLength
+
+                // Scroll to top if entire file selected so that the user can see the input
+                if (isEntireFileSelected) {
+                    editor.scrollingModel.scrollTo(
+                        LogicalPosition(0, 0),
+                        com.intellij.openapi.editor.ScrollType.CENTER
+                    )
+                }
+
                 val selectionTopY = calculateSelectionTopY(editor, startLine, endLine, isFullLineSelection)
                 val tooltipX = calculateTooltipX(editor, document, startLine, endLine, isFullLineSelection)
 
@@ -162,8 +179,8 @@ class ContinuePluginSelectionListener(
             val lineStartOffset = document.getLineStartOffset(lineNumber)
             val lineEndOffset = document.getLineEndOffset(lineNumber)
             val lineText = document.getText(TextRange(lineStartOffset, lineEndOffset)).trimEnd()
-            val endOfLinePos = LogicalPosition(lineNumber, lineText.length)
-            return editor.logicalPositionToXY(endOfLinePos).x
+            val visualPosition = editor.offsetToVisualPosition(lineStartOffset + lineText.length)
+            return editor.visualPositionToXY(visualPosition).x
         }
 
         val offset = 40

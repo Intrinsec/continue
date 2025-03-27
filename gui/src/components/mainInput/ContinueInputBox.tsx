@@ -1,14 +1,14 @@
 import { Editor, JSONContent } from "@tiptap/react";
 import { ContextItemWithId, InputModifiers } from "core";
-import { useDispatch } from "react-redux";
+import { useMemo, useState } from "react";
 import styled, { keyframes } from "styled-components";
 import { defaultBorderRadius, vscBackground } from "..";
-import { selectSlashCommandComboBoxInputs } from "../../redux/selectors";
-import ContextItemsPeek from "./ContextItemsPeek";
-import TipTapEditor from "./TipTapEditor";
 import { useAppSelector } from "../../redux/hooks";
+import { selectSlashCommandComboBoxInputs } from "../../redux/selectors";
+import ContextItemsPeek from "./belowMainInput/ContextItemsPeek";
 import { ToolbarOptions } from "./InputToolbar";
-import { useMemo } from "react";
+import { Lump } from "./Lump";
+import TipTapEditor from "./tiptap/TipTapEditor";
 
 interface ContinueInputBoxProps {
   isEditMode?: boolean;
@@ -22,6 +22,7 @@ interface ContinueInputBoxProps {
   editorState?: JSONContent;
   contextItems?: ContextItemWithId[];
   hidden?: boolean;
+  inputId: string; // used to keep track of things per input in redux
 }
 
 const EDIT_DISALLOWED_CONTEXT_PROVIDERS = [
@@ -81,9 +82,6 @@ function ContinueInputBox(props: ContinueInputBoxProps) {
   const availableContextProviders = useAppSelector(
     (state) => state.config.config.contextProviders,
   );
-  const useTools = useAppSelector(
-    (state) => state.config.config.experimental?.useTools !== false,
-  );
   const editModeState = useAppSelector((state) => state.editModeState);
 
   const filteredSlashCommands = props.isEditMode ? [] : availableSlashCommands;
@@ -100,30 +98,27 @@ function ContinueInputBox(props: ContinueInputBoxProps) {
     );
   }, [availableContextProviders]);
 
-  const isStreamingEdit =
-    editModeState.editStatus === "streaming" ||
-    editModeState.editStatus === "accepting";
-
   const historyKey = props.isEditMode ? "edit" : "chat";
   const placeholder = props.isEditMode
     ? "Describe how to modify the code - use '#' to add files"
     : undefined;
+
   const toolbarOptions: ToolbarOptions = props.isEditMode
     ? {
         hideAddContext: false,
         hideImageUpload: false,
         hideUseCodebase: true,
         hideSelectModel: false,
-        hideTools: true,
-        enterText: isStreamingEdit ? "Retry" : "Edit",
+        enterText: editModeState.editStatus === "accepting" ? "Retry" : "Edit",
       }
-    : {
-        hideTools: !useTools,
-      };
+    : {};
+
+  const [lumpOpen, setLumpOpen] = useState(true);
 
   return (
     <div className={`${props.hidden ? "hidden" : ""}`}>
       <div className={`relative flex flex-col px-2`}>
+        {props.isMainInput && <Lump open={lumpOpen} setOpen={setLumpOpen} />}
         <GradientBorder
           loading={isStreaming && props.isLastUserInput ? 1 : 0}
           borderColor={
@@ -140,6 +135,9 @@ function ContinueInputBox(props: ContinueInputBoxProps) {
             availableSlashCommands={filteredSlashCommands}
             historyKey={historyKey}
             toolbarOptions={toolbarOptions}
+            lumpOpen={lumpOpen}
+            setLumpOpen={setLumpOpen}
+            inputId={props.inputId}
           />
         </GradientBorder>
       </div>

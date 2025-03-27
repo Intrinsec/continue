@@ -1,8 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import { IDE } from "core";
 import { ConfigHandler } from "core/config/ConfigHandler";
-import { getModelByRole } from "core/config/util";
-import { logDevData } from "core/util/devdata";
 import { Telemetry } from "core/util/posthog";
 import * as vscode from "vscode";
 
@@ -10,13 +8,13 @@ import { VerticalDiffManager } from "../diff/vertical/manager";
 import { FileSearch } from "../util/FileSearch";
 import { VsCodeWebviewProtocol } from "../webviewProtocol";
 
+import { DataLogger } from "core/data/log";
 import { getContextProviderQuickPickVal } from "./ContextProvidersQuickPick";
 import { appendToHistory, getHistoryQuickPickVal } from "./HistoryQuickPick";
 import { getModelQuickPickVal } from "./ModelSelectionQuickPick";
 
 // @ts-ignore - error finding typings
 // @ts-ignore
-
 
 /**
  * Used to track what action to take after a user interacts
@@ -133,11 +131,11 @@ export class QuickEdit {
     }
 
     const hasChanges = !!this.verticalDiffManager.getHandlerForFile(
-      editor.document.uri.fsPath,
+      editor.document.uri.toString(),
     );
 
     if (hasChanges) {
-      this.openAcceptRejectMenu("", editor.document.uri.fsPath);
+      this.openAcceptRejectMenu("", editor.document.uri.toString());
     } else {
       await this.initiateNewQuickPick(editor, params);
     }
@@ -185,7 +183,7 @@ export class QuickEdit {
     });
 
     if (prompt) {
-      await this.handleUserPrompt(prompt, editor.document.uri.fsPath);
+      await this.handleUserPrompt(prompt, editor.document.uri.toString());
     }
   }
 
@@ -227,13 +225,18 @@ export class QuickEdit {
           break;
       }
       let model = await this.getCurModelTitle();
-      logDevData("quickEdit", {
-        prompt,
-        path,
-        label,
-        diffs: this.verticalDiffManager.logDiffs,
-        model,
+
+      void DataLogger.getInstance().logDevData({
+        name: "quickEdit",
+        data: {
+          prompt,
+          path,
+          label,
+          diffs: this.verticalDiffManager.logDiffs,
+          model,
+        },
       });
+
       quickPick.dispose();
     });
   }
@@ -243,13 +246,17 @@ export class QuickEdit {
     path: string | undefined,
   ) => {
     const modelTitle = await this.getCurModelTitle();
+    if (!modelTitle) {
+      throw new Error("No model selected");
+    }
+
     await this._streamEditWithInputAndContext(prompt, modelTitle);
     this.openAcceptRejectMenu(prompt, path);
   };
 
   private setActiveEditorAndPrevInput(editor: vscode.TextEditor) {
     const existingHandler = this.verticalDiffManager.getHandlerForFile(
-      editor.document.uri.fsPath ?? "",
+      editor.document.uri.toString(),
     );
 
     this.editorWhenOpened = editor;
@@ -259,15 +266,18 @@ export class QuickEdit {
   /**
    * Gets the model title the user has chosen, or their default model
    */
-  private async getCurModelTitle() {
+  private async getCurModelTitle(): Promise<string | undefined> {
     if (this._curModelTitle) {
       return this._curModelTitle;
     }
 
-    const config = await this.configHandler.loadConfig();
+    const { config } = await this.configHandler.loadConfig();
+    if (!config) {
+      return undefined;
+    }
 
     return (
-      getModelByRole(config, "inlineEdit")?.title ??
+      config.selectedModelByRole.edit?.title ??
       (await this.webviewProtocol.request(
         "getDefaultModelTitle",
         undefined,
@@ -448,8 +458,8 @@ export class QuickEdit {
 
           if (searchResults.length > 0) {
             quickPick.items = searchResults
-              .map(({ filename }) => ({
-                label: filename,
+              .map(({ relativePath }) => ({
+                label: relativePath,
                 alwaysShow: true,
               }))
               .slice(0, QuickEdit.maxFileSearchResults);
@@ -518,7 +528,10 @@ export class QuickEdit {
     editor: vscode.TextEditor;
     params: QuickEditShowParams | undefined;
   }) {
-    const config = await this.configHandler.loadConfig();
+    const { config } = await this.configHandler.loadConfig();
+    if (!config) {
+      throw new Error("Config not loaded");
+    }
 
     let prompt: string | undefined;
     switch (selectedLabel) {

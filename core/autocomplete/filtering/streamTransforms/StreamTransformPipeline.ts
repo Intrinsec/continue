@@ -1,6 +1,4 @@
 import { streamLines } from "../../../diff/util";
-import { DEFAULT_AUTOCOMPLETE_OPTS } from "../../../util/parameters";
-import { PosthogFeatureFlag, Telemetry } from "../../../util/posthog";
 import { HelperVars } from "../../util/HelperVars";
 
 import { stopAtStartOf, stopAtStopTokens } from "./charStream";
@@ -74,12 +72,7 @@ export class StreamTransformPipeline {
       fullStop,
     );
 
-    const timeoutValue =
-      helper.options.showWhateverWeHaveAtXMs ??
-      (await Telemetry.getValueForFeatureFlag(
-        PosthogFeatureFlag.AutocompleteTimeout,
-      )) ??
-      DEFAULT_AUTOCOMPLETE_OPTS.showWhateverWeHaveAtXMs;
+    const timeoutValue = helper.options.showWhateverWeHaveAtXMs;
 
     lineGenerator = showWhateverWeHaveAtXMs(lineGenerator, timeoutValue!);
 

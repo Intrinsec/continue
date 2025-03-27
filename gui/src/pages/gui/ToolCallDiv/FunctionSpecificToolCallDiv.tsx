@@ -1,4 +1,4 @@
-import { ToolCall, ToolCallState } from "core";
+import { ToolCall, ToolCallDelta, ToolCallState } from "core";
 import { CreateFile } from "./CreateFile";
 import { RunTerminalCommand } from "./RunTerminalCommand";
 
@@ -6,17 +6,20 @@ function FunctionSpecificToolCallDiv({
   toolCall,
   toolCallState,
 }: {
-  toolCall: ToolCall;
+  toolCall: ToolCallDelta;
   toolCallState: ToolCallState;
 }) {
   const args = toolCallState.parsedArgs;
 
-  switch (toolCall.function.name) {
-    case "create_new_file":
+  switch (toolCall.function?.name) {
+    case "builtin_create_new_file":
       return (
-        <CreateFile filepath={args.filepath} fileContents={args.contents} />
+        <CreateFile
+          relativeFilepath={args.filepath}
+          fileContents={args.contents}
+        />
       );
-    case "run_terminal_command":
+    case "builtin_run_terminal_command":
       return (
         <RunTerminalCommand
           command={args.command}

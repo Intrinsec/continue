@@ -1,10 +1,5 @@
-import {
-  Position,
-  Range,
-  RangeInFile,
-  RangeInFileWithContents,
-  TabAutocompleteOptions,
-} from "../..";
+import { Position, Range, RangeInFile, TabAutocompleteOptions } from "../..";
+import { AutocompleteCodeSnippet } from "../snippets/types";
 
 export type RecentlyEditedRange = RangeInFile & {
   timestamp: number;
@@ -17,7 +12,7 @@ export interface AutocompleteInput {
   completionId: string;
   filepath: string;
   pos: Position;
-  recentlyEditedFiles: RangeInFileWithContents[];
+  recentlyVisitedRanges: AutocompleteCodeSnippet[];
   recentlyEditedRanges: RecentlyEditedRange[];
   // Used for notebook files
   manuallyPassFileContents?: string;
@@ -41,6 +36,7 @@ export interface AutocompleteOutcome extends TabAutocompleteOptions {
   modelName: string;
   completionOptions: any;
   cacheHit: boolean;
+  numLines: number;
   filepath: string;
   gitRepo?: string;
   completionId: string;
