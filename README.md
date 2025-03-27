@@ -3,7 +3,7 @@
 
 Continue.dev est l'assistant de codage IA open source principal. Conçu pour connecter n'importe quel modèle et contexte, il permet de créer des expériences personnalisées d'autocomplétion et de chat directement dans l'environnement de développement. Au-delà de l'approche IDE, cela ouvre la porte à la création de cas d'utilisation autour de fichiers texte (notamment Markdown) et d'interactions avancées avec des LLM (Large Language Models).
 
-## Pour Intrinsec, cette version spécialisée offre :
+## Pour Intrinsec, cette version spécialisée offre:
 
 * Compatibilité avec la plateforme [https://ai.intrinsec.com](https://ai.intrinsec.com)
 * Accès aux modèles autorisés pour le traitement des données clients
@@ -34,9 +34,10 @@ Continue.dev est l'assistant de codage IA open source principal. Conçu pour con
   * **Étapes de configuration :**
 1. **Accès au fichier de configuration** :
 * Cliquez sur l'icône de l'Extension Continue.
-* Cliquez ensuite sur l'icône de la roue dentée pour ouvrir votre fichier de configuration.
+* Cliquez ensuite sur "Or, remain local." en dessous du bouton "Get started"
+* CLiquer ensuite sur sur le lien **config file** de la phrase "This will update your config file" (En bas de la page)
 2. **Méthode alternative d'accès à la configuration** :
-* La configuration du plugin est accessible via le fichier : `C:\Users\user\.continue\config.json`.
+* La configuration du plugin est accessible via le fichier : `C:\Users\user\.continue\config.yaml` une fois que le plugin à été éxécuté une première fois.
 3. **Mise à jour de la configuration** : Effacez le contenu actuel du fichier de configuration et remplacez-le par la nouvelle configuration fournie.
 4. **Important :** Remplacez toutes les occurrences de `"FIXME_APIKEY"` par votre jeton d'authentification API Dragonfly.
 * Le jeton est disponible dans votre profil sur l'interface web de la plateforme IA. https://ai.intrinsec.com/
@@ -45,149 +46,54 @@ Continue.dev est l'assistant de codage IA open source principal. Conçu pour con
 
 * **Pour ajouter des modèles supplémentaires :**
   * Consultez la section "Models" de la documentation API de la plateforme IA.
-  * Copiez le nom et le titre du modèle souhaité.
+  * Copiez le nom et le titre du modèle souhaité et ajouter le parametre contextLength correspondant à la valeur "Context Window".
   * Ajoutez un nouveau bloc de modèle dans votre configuration.
 
-### Fichier de Configuration (`config.json`)
-```JSON
-{
-  "models": [
-    {
-      "model": "neuralmagic/Llama-3.1-Nemotron-70B-Instruct-HF-FP8-dynamic",
-      "title": "AI Intrinsec - SNC - Llama 3.1 Nemotron",
-      "apiKey": "FIXME_APIKEY",
-      "provider": "dragonfly",
-      "contextLength": "60000"
-    },
-    {
-      "model": "claude-3-5-sonnet-latest",
-      "title": "AI Intrinsec - Claude 3.5 Sonnet ",
-      "apiKey": "FIXME_APIKEY",
-      "provider": "dragonfly"
-    },
-    {
-      "model": "mistral-large-latest ",
-      "title": "AI Intrinsec - Mistral",
-      "apiKey": "FIXME_APIKEY",
-      "provider": "dragonfly"
-    },
-    {
-      "model": "chatgpt-4o-latest",
-      "title": "AI Intrinsec - Chat GPT 4o",
-      "apiKey": "FIXME_APIKEY",
-      "provider": "dragonfly"
-    },
-    {
-      "model": "o1-mini",
-      "title": "AI Intrinsec - Chat GPT o1-mini",
-      "apiKey": "FIXME_APIKEY",
-      "provider": "dragonfly"
-    },
-    {
-      "title": "Exemple installation ollama locale - Local Llama 3.1 8B (recommanded)",
-      "provider": "ollama",
-      "model": "llama3.1:8b"
-    },
-    {
-      "title": "Exemple installation ollama locale - Local IBM Granite 3.1-dense 8B",
-      "provider": "ollama",
-      "model": "granite3.1-dense:8b",
-      "systemMessage": "You are an expert software developer. You give helpful and concise responses."
-    },
-    {
-      "title": "Exemple installation ollama locale - Local DeepSeek Coder 2 16B",
-      "provider": "ollama",
-      "model": "deepseek-coder-v2:16b",
-      "systemMessage": "You are an expert software developer. You give helpful and concise responses."
-    }
-  ],
-  "tabAutocompleteOptions": {
-    "disable": true
-  },
-  "tabAutocompleteModel": {
-    "title": "Local Qwen2.5-Coder 1.5B (recommanded)",
-    "model": "qwen2.5-coder:1.5b",
-    "provider": "ollama"
-  },
-  "slashCommands": [
-    {
-      "name": "edit",
-      "description": "Edit selected code"
-    },
-    {
-      "name": "comment",
-      "description": "Write comments for the selected code"
-    },
-    {
-      "name": "share",
-      "description": "Export this session as markdown"
-    },
-    {
-      "name": "cmd",
-      "description": "Generate a shell command"
-    },
-    {
-      "name": "commit",
-      "description": "Generate a git commit message"
-    }
-  ],
-  "customCommands": [
-    {
-      "name": "test",
-      "prompt": "Write a comprehensive set of unit tests for the selected code. It should setup, run tests that check for correctness including important edge cases, and teardown. Ensure that the tests are complete and sophisticated. Give the tests just as chat output, don't edit any file.",
-      "description": "Write unit tests for highlighted code"
-    }
-  ],
-  "contextProviders": [
-    {
-      "name": "file"
-    },
-    {
-      "name": "diff",
-      "params": {}
-    },
-    {
-      "name": "open",
-      "params": {
-        "onlyPinned": true
-      }
-    },
-    {
-      "name": "terminal",
-      "params": {}
-    },
-    {
-      "name": "problems",
-      "params": {}
-    },
-    {
-      "name": "codebase",
-      "params": {}
-    },
-    {
-      "name": "code",
-      "params": {}
-    },
-    {
-      "name": "docs",
-      "params": {}
-    },
-    {
-      "name": "tree"
-    },
-    {
-      "name": "repo-map"
-    },
-    {
-      "name": "folder"
-    },
-    {
-      "name": "url"
-    }
-  ],
-  "allowAnonymousTelemetry": false,
-  "docs": []
-}
+### Fichier de Configuration (`config.yaml`)
+```YAML
+%YAML 1.1
+---
+name: Dragonfly
+version: 0.0.1
+schema: v1
+
+model_defaults: &model_defaults
+  provider: dragonfly
+  apiKey: FIXME_APIKEY
+
+models:
+  - name: claude-3-7-sonnet-latest
+    <<: *model_defaults
+    model: claude-3-7-sonnet-latest
+    contextLength: 200000
+    roles:
+      - chat
+      - edit
+  - name: CT SNC
+    <<: *model_defaults
+    model: neuralmagic/Llama-3.1-Nemotron-70B-Instruct-HF-FP8-dynamic
+    contextLength: 60000
+    roles:
+      - chat
+      - edit
+  - name: mistral-large-latest
+    <<: *model_defaults
+    model: mistral-large-latest
+    contextLength: 128000
+    roles:
+      - chat
+      - edit
+
+context:
+  - provider: files
+  - provider: code
+  - provider: codebase
+    params:
+      nFinal: 10
+  - provider: docs
+  - provider: diff
+  - provider: folder
+  - provider: terminal
 ```
 
 ## Recommandations
@@ -241,71 +147,3 @@ Continue.dev est l'assistant de codage IA open source principal. Conçu pour con
 * **Support IDE Jetbrains :** Tester et compiler la version pour les IDE Jetbrains.
 * **Provider Dragonfly dans l'outil de configuration :** Implémenter le provider dragonfly dans l'outil de configuration initial de Continue, afin de ne plus avoir à modifier la configuration à la main.
 * **Mise à jour automatique :** Étudier la possibilité de mettre en place une fonction de mise à jour automatique.
-
-# ORIGINAL README
-
-<div align="center">
-
-![Continue logo](media/readme.png)
-
-</div>
-
-<h1 align="center">Continue</h1>
-
-<div align="center">
-
-**[Continue](https://docs.continue.dev) enables developers to create, share, and use custom AI code assistants with our open-source [VS Code](https://marketplace.visualstudio.com/items?itemName=Continue.continue) and [JetBrains](https://plugins.jetbrains.com/plugin/22707-continue-extension) extensions and [hub of models, rules, prompts, docs, and other building blocks](https://hub.continue.dev)**
-
-</div>
-
-<div align="center">
-
-<a target="_blank" href="https://opensource.org/licenses/Apache-2.0" style="background:none">
-    <img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" style="height: 22px;" />
-</a>
-<a target="_blank" href="https://docs.continue.dev" style="background:none">
-    <img src="https://img.shields.io/badge/continue_docs-%23BE1B55" style="height: 22px;" />
-</a>
-<a target="_blank" href="https://discord.gg/vapESyrFmJ" style="background:none">
-    <img src="https://img.shields.io/badge/discord-join-continue.svg?labelColor=191937&color=6F6FF7&logo=discord" style="height: 22px;" />
-</a>
-
-<p></p>
-
-## Chat
-
-[Chat](https://continue.dev/docs/chat/how-to-use-it) makes it easy to ask for help from an LLM without needing to leave the IDE
-
-![chat](docs/static/img/chat.gif)
-
-## Autocomplete
-
-[Autocomplete](https://continue.dev/docs/autocomplete/how-to-use-it) provides inline code suggestions as you type
-
-![autocomplete](docs/static/img/autocomplete.gif)
-
-## Edit
-
-[Edit](https://continue.dev/docs/edit/how-to-use-it) is a convenient way to modify code without leaving your current file
-
-![edit](docs/static/img/edit.gif)
-
-## Actions
-
-[Actions](https://continue.dev/docs/actions/how-to-use-it) are shortcuts for common use cases
-
-![actions](docs/static/img/actions.gif)
-
-</div>
-
-## Getting Started
-
-Learn about how to install and use Continue in the docs [here](https://continue.dev/docs/getting-started/install)
-
-## Contributing
-
-Check out the [contribution ideas board](https://github.com/orgs/continuedev/projects/2), read the [contributing guide](https://github.com/continuedev/continue/blob/main/CONTRIBUTING.md), and join [#contribute on Discord](https://discord.gg/vapESyrFmJ)
-
-## License
-
-[Apache 2.0 © 2023-2024 Continue Dev, Inc.](./LICENSE)
