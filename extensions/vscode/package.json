@@ -1,5 +1,5 @@
 {
-  "name": "continue",
+  "name": "isec-continue",
   "icon": "media/icon.png",
   "author": "Continue Dev, Inc",
   "version": "1.0.5",
@@ -18,10 +18,10 @@
   "homepage": "https://continue.dev",
   "qna": "https://github.com/continuedev/continue/issues/new/choose",
   "license": "Apache-2.0",
-  "displayName": "Continue - Codestral, Claude, and more",
+  "displayName": "Intrinsec - Continue - Codestral, Claude, and more",
   "pricing": "Free",
   "description": "The leading open-source AI code assistant",
-  "publisher": "Continue",
+  "publisher": "intrinsec",
   "engines": {
     "vscode": "^1.70.0",
     "node": ">=20.11.0"
@@ -616,7 +616,7 @@
     "@vscode/vsce": "^2.22.0",
     "cargo-cp-artifact": "^0.1",
     "chai": "^4.5.0",
-    "esbuild": "0.17.19",
+    "esbuild": "^0.17.19",
     "esbuild-visualizer": "^0.6.0",
     "eslint": "^8.28.0",
     "glob": "^8.0.3",
