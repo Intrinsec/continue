@@ -85,7 +85,8 @@ models:
       - edit
 
 context:
-  - provider: files
+  - provider: file
+  - provider: currentFile
   - provider: code
   - provider: codebase
     params:
