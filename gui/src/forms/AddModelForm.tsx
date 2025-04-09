@@ -14,6 +14,7 @@ import {
 import { FREE_TRIAL_LIMIT_REQUESTS, hasPassedFTL } from "../util/freeTrial";
 import { completionParamsInputs } from "../pages/AddNewModel/configs/completionParamsInputs";
 import { setDefaultModel } from "../redux/slices/configSlice";
+import { DisplayInfo } from "../pages/AddNewModel/configs/models";
 
 interface QuickModelSetupProps {
   onDone: () => void;
@@ -41,6 +42,29 @@ function AddModelForm({
   const dispatch = useDispatch();
   const ideMessenger = useContext(IdeMessengerContext);
 
+  const popularProviderTitles = [
+    providers["openai"]?.title || "",
+    providers["anthropic"]?.title || "",
+    providers["mistral"]?.title || "",
+    providers["gemini"]?.title || "",
+    providers["azure"]?.title || "",
+    providers["ollama"]?.title || "",
+  ];
+
+  const allProviders = Object.entries(providers)
+    .filter(([key]) => !["freetrial", "openai-aiohttp"].includes(key))
+    .map(([, provider]) => provider)
+    .filter((provider) => !!provider)
+    .map((provider) => provider!); // for type checking
+
+  const popularProviders = allProviders
+    .filter((provider) => popularProviderTitles.includes(provider.title))
+    .sort((a, b) => a.title.localeCompare(b.title));
+
+  const otherProviders = allProviders
+    .filter((provider) => !popularProviderTitles.includes(provider.title))
+    .sort((a, b) => a.title.localeCompare(b.title));
+
   const selectedProviderApiKeyUrl = selectedModel.params.model.startsWith(
     "codestral",
   )
@@ -56,13 +80,13 @@ function AddModelForm({
     }
 
     const required = selectedProvider.collectInputFor
-      .filter((input) => input.required)
+      ?.filter((input) => input.required)
       .map((input) => {
         const value = formMethods.watch(input.key);
         return value;
       });
 
-    return !required.every((value) => value !== undefined && value.length > 0);
+    return !required?.every((value) => value !== undefined && value.length > 0);
   }
 
   useEffect(() => {
@@ -72,8 +96,8 @@ function AddModelForm({
   function onSubmit() {
     const apiKey = formMethods.watch("apiKey");
     const hasValidApiKey = apiKey !== undefined && apiKey !== "";
-    const reqInputFields = {};
-    for (let input of selectedProvider.collectInputFor) {
+    const reqInputFields: Record<string, any> = {};
+    for (let input of selectedProvider.collectInputFor ?? []) {
       reqInputFields[input.key] = formMethods.watch(input.key);
     }
 
@@ -126,12 +150,16 @@ function AddModelForm({
               <label className="block text-sm font-medium">Provider</label>
               <ModelSelectionListbox
                 selectedProvider={selectedProvider}
-                setSelectedProvider={setSelectedProvider}
-                options={Object.entries(providers)
-                  .filter(
-                    ([key]) => !["freetrial", "openai-aiohttp"].includes(key),
-                  )
-                  .map(([, provider]) => provider)}
+                setSelectedProvider={(val: DisplayInfo) => {
+                  const match = [...popularProviders, ...otherProviders].find(
+                    (provider) => provider.title === val.title,
+                  );
+                  if (match) {
+                    setSelectedProvider(match);
+                  }
+                }}
+                topOptions={popularProviders}
+                otherOptions={otherProviders}
               />
               <InputSubtext className="mb-0">
                 Don't see your provider?{" "}
@@ -166,11 +194,24 @@ function AddModelForm({
               <label className="block text-sm font-medium">Model</label>
               <ModelSelectionListbox
                 selectedProvider={selectedModel}
-                setSelectedProvider={setSelectedModel}
-                options={
+                setSelectedProvider={(val: DisplayInfo) => {
+                  const options =
+                    Object.entries(providers).find(
+                      ([, provider]) =>
+                        provider?.title === selectedProvider.title,
+                    )?.[1]?.packages ?? [];
+                  const match = options.find(
+                    (option) => option.title === val.title,
+                  );
+                  if (match) {
+                    setSelectedModel(match);
+                  }
+                }}
+                otherOptions={
                   Object.entries(providers).find(
-                    ([, provider]) => provider.title === selectedProvider.title,
-                  )?.[1].packages
+                    ([, provider]) =>
+                      provider?.title === selectedProvider.title,
+                  )?.[1]?.packages
                 }
               />
             </div>
@@ -202,9 +243,14 @@ function AddModelForm({
                   <InputSubtext className="mb-0">
                     <a
                       className="cursor-pointer text-inherit underline hover:text-inherit"
-                      onClick={() =>
-                        ideMessenger.post("openUrl", selectedProviderApiKeyUrl)
-                      }
+                      onClick={() => {
+                        if (selectedProviderApiKeyUrl) {
+                          ideMessenger.post(
+                            "openUrl",
+                            selectedProviderApiKeyUrl,
+                          );
+                        }
+                      }}
                     >
                       Click here
                     </a>{" "}

@@ -8,7 +8,7 @@ export const selectSlashCommandComboBoxInputs = createSelector(
     return (
       slashCommands?.map((cmd) => {
         return {
-          title: `/${cmd.name}`,
+          title: `${cmd.name}`,
           description: cmd.description,
           type: "slashCommand" as ComboBoxItemType,
         };
@@ -24,7 +24,7 @@ export const selectSlashCommands = createSelector(
   },
 );
 
-export const selectContextProviderDescriptions = createSelector(
+export const selectSubmenuContextProviders = createSelector(
   [(state: RootState) => state.config.config.contextProviders],
   (providers) => {
     return providers?.filter((desc) => desc.type === "submenu") || [];
@@ -41,4 +41,9 @@ export const selectDefaultContextProviders = createSelector(
 export const selectUseActiveFile = createSelector(
   [(state: RootState) => state.config.config.experimental?.defaultContext],
   (defaultContext) => defaultContext?.includes("activeFile" as any),
+);
+
+export const selectUseHub = createSelector(
+  [(state: RootState) => state.config.config.usePlatform],
+  (usePlatform) => usePlatform,
 );

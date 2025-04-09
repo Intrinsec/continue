@@ -3,6 +3,7 @@ package com.github.continuedev.continueintellijextension.editor
 import com.github.continuedev.continueintellijextension.utils.getAltKeyLabel
 import com.github.continuedev.continueintellijextension.utils.getShiftKeyLabel
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.invokeLater
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.LogicalPosition
@@ -11,8 +12,9 @@ import com.intellij.openapi.editor.markup.HighlighterLayer
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.ui.JBColor
+import com.intellij.util.application
+import com.intellij.util.ui.JBUI
 import java.awt.*
-import javax.swing.BorderFactory
 import javax.swing.JButton
 import javax.swing.JTextArea
 import kotlin.math.min
@@ -23,8 +25,8 @@ class VerticalDiffBlock(
     var startLine: Int,
     private val onAcceptReject: (VerticalDiffBlock, Boolean) -> Unit
 ) {
-    val deletedLines: MutableList<String> = mutableListOf();
-    val addedLines: MutableList<String> = mutableListOf();
+    val deletedLines: MutableList<String> = mutableListOf()
+    val addedLines: MutableList<String> = mutableListOf()
     private val acceptButton: JButton
     private val rejectButton: JButton
     private var deletionInlay: Disposable? = null
@@ -41,7 +43,14 @@ class VerticalDiffBlock(
     }
 
     fun clearEditorUI() {
-        deletionInlay?.dispose()
+        deletionInlay?.let {
+            // Ensure that dispose is executed on EDT
+            if (application.isDispatchThread) {
+                it.dispose()
+            } else {
+                invokeLater { it.dispose() }
+            }
+        }
         removeGreenHighlighters()
         removeButtons()
     }
@@ -146,10 +155,10 @@ class VerticalDiffBlock(
         val rejectBtn =
             createButton(
                 "${getAltKeyLabel()}${getShiftKeyLabel()}N",
-                JBColor(0x99FF0000.toInt(), 0x99FF0000.toInt())
+                JBColor(0x77FF0000, 0x77FF0000)
             ).apply {
                 addActionListener {
-                    handleReject();
+                    handleReject()
                     onAcceptReject(this@VerticalDiffBlock, false)
                 }
 
@@ -159,10 +168,10 @@ class VerticalDiffBlock(
             createButton(
                 "${getAltKeyLabel()}${
                     getShiftKeyLabel()
-                }Y", JBColor(0x7700BB00.toInt(), 0x7700BB00.toInt())
+                }Y", JBColor(0x7700BB00, 0x7700BB00)
             ).apply {
                 addActionListener {
-                    handleAccept();
+                    handleAccept()
                     onAcceptReject(this@VerticalDiffBlock, true)
                 }
             }
@@ -183,10 +192,12 @@ class VerticalDiffBlock(
 
     private fun revertDiff() {
         WriteCommandAction.runWriteCommandAction(project) {
-            // Delete the added lines
             val startOffset = editor.document.getLineStartOffset(startLine)
-            val endOffset = editor.document.getLineEndOffset(startLine + addedLines.size - 1) + 1
-            editor.document.deleteString(startOffset, endOffset)
+            // Delete the added lines
+            if (addedLines.isNotEmpty()) {
+                val endOffset = editor.document.getLineEndOffset(startLine + addedLines.size - 1) + 1
+                editor.document.deleteString(startOffset, endOffset)
+            }
 
             // Add the deleted lines back
             if (deletedLines.isNotEmpty()) {
@@ -206,9 +217,9 @@ class VerticalDiffBlock(
 
     private fun createDeletionTextArea(text: String) = JTextArea(text).apply {
         isEditable = false
-        background = JBColor(0x30FF0000.toInt(), 0x30FF0000.toInt())
+        background = JBColor(0x30FF0000, 0x30FF0000)
         foreground = JBColor.GRAY
-        border = BorderFactory.createEmptyBorder()
+        border = JBUI.Borders.empty()
         lineWrap = false
         wrapStyleWord = false
         font = editor.colorsScheme.getFont(EditorFontType.PLAIN)
@@ -241,7 +252,7 @@ class VerticalDiffBlock(
             font = Font("Arial", Font.BOLD, 9)
             isContentAreaFilled = false
             isOpaque = false
-            border = BorderFactory.createEmptyBorder(4, 2, 4, 2)
+            border = JBUI.Borders.empty(4, 2)
             preferredSize = Dimension(preferredSize.width - 30, 14)
             cursor = Cursor(Cursor.HAND_CURSOR)
         }

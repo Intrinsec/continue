@@ -1,17 +1,15 @@
-import { getPathModuleForIde } from "../../util/pathModule";
+import { inferResolvedUriFromRelativePath } from "../../util/ideUtils";
 
 import { ToolImpl } from ".";
 
 export const createNewFileImpl: ToolImpl = async (args, extras) => {
-  const pathSep = await extras.ide.pathSep();
-  let filepath = args.filepath;
-  if (!args.filepath.startsWith(pathSep)) {
-    const pathModule = await getPathModuleForIde(extras.ide);
-    const workspaceDirs = await extras.ide.getWorkspaceDirs();
-    const cwd = workspaceDirs[0];
-    filepath = pathModule.join(cwd, filepath);
+  const resolvedFileUri = await inferResolvedUriFromRelativePath(
+    args.filepath,
+    extras.ide,
+  );
+  if (resolvedFileUri) {
+    await extras.ide.writeFile(resolvedFileUri, args.contents);
+    await extras.ide.openFile(resolvedFileUri);
   }
-  await extras.ide.writeFile(filepath, args.contents);
-  await extras.ide.openFile(filepath);
   return [];
 };

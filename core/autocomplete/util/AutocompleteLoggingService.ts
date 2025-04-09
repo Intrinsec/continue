@@ -1,6 +1,7 @@
-import { logDevData } from "../../util/devdata";
+import { DataLogger } from "../../data/log";
 import { COUNT_COMPLETION_REJECTED_AFTER } from "../../util/parameters";
 import { Telemetry } from "../../util/posthog";
+import { getUriFileExtension } from "../../util/uri";
 
 import { AutocompleteOutcome } from "./types";
 
@@ -95,7 +96,14 @@ export class AutocompleteLoggingService {
   }
 
   private logAutocompleteOutcome(outcome: AutocompleteOutcome) {
-    logDevData("autocomplete", outcome);
+    void DataLogger.getInstance().logDevData({
+      name: "autocomplete",
+      data: {
+        ...outcome,
+        useFileSuffix: true, // from outdated schema
+      },
+    });
+
     const { prompt, completion, prefix, suffix, ...restOfOutcome } = outcome;
     void Telemetry.capture(
       "autocomplete",
@@ -105,13 +113,14 @@ export class AutocompleteLoggingService {
         completionId: restOfOutcome.completionId,
         completionOptions: restOfOutcome.completionOptions,
         debounceDelay: restOfOutcome.debounceDelay,
-        fileExtension: restOfOutcome.filepath.split(".")?.slice(-1)[0],
+        fileExtension: getUriFileExtension(restOfOutcome.filepath),
         maxPromptTokens: restOfOutcome.maxPromptTokens,
         modelName: restOfOutcome.modelName,
         modelProvider: restOfOutcome.modelProvider,
         multilineCompletions: restOfOutcome.multilineCompletions,
         time: restOfOutcome.time,
         useRecentlyEdited: restOfOutcome.useRecentlyEdited,
+        numLines: restOfOutcome.numLines,
       },
       true,
     );

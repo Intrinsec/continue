@@ -1,3 +1,4 @@
+import { getUriFileExtension } from "../../util/uri";
 import { BracketMatchingService } from "../filtering/BracketMatchingService";
 import {
   CharacterFilter,
@@ -27,7 +28,7 @@ export const Python = {
   name: "Python",
   // """"#" is for .ipynb files, where we add '"""' surrounding markdown blocks.
   // This stops the model from trying to complete the start of a new markdown block
-  topLevelKeywords: ["def", "class", "\"\"\"#"],
+  topLevelKeywords: ["def", "class", '"""#'],
   singleLineComment: "#",
   endOfLine: [],
 };
@@ -239,6 +240,14 @@ export const Solidity = {
   endOfLine: [";"],
 };
 
+// Lua
+export const Lua = {
+  name: "Lua",
+  topLevelKeywords: ["function"],
+  singleLineComment: "--",
+  endOfLine: [],
+};
+
 // YAML
 export const YAML: AutocompleteLanguageInfo = {
   name: "YAML",
@@ -366,10 +375,11 @@ export const LANGUAGES: { [extension: string]: AutocompleteLanguageInfo } = {
   yaml: YAML,
   yml: YAML,
   md: Markdown,
+  lua: Lua,
+  luau: Lua,
 };
 
-export function languageForFilepath(
-  filepath: string,
-): AutocompleteLanguageInfo {
-  return LANGUAGES[filepath.split(".").slice(-1)[0]] || Typescript;
+export function languageForFilepath(fileUri: string): AutocompleteLanguageInfo {
+  const extension = getUriFileExtension(fileUri);
+  return LANGUAGES[extension] || Typescript;
 }

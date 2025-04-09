@@ -31,12 +31,6 @@ toc_max_heading_level: 5
 3. 本地保存嵌入在你的机器上
 4. 通过 `@Docs` 上下文提供者提供访问索引内容
 
-## 预先索引文档网站
-
-我们提供一个流行的框架和库的预先索引文档网站的选择。你可以 [在这里查看可用的预先索引网站和请求附加内容](https://github.com/continuedev/continue/blob/main/core/indexing/docs/preIndexedDocs.ts) 列表。
-
-## 索引你自己的文档
-
 ### 通过 `@Docs` 上下文提供者
 
 为了添加一个单独的文档网站，我们推荐使用 `@Docs` 上下文提供者。
@@ -58,7 +52,6 @@ toc_max_heading_level: 5
     {
     "title": "Continue",
     "startUrl": "https://docs.continue.dev/intro",
-    "rootUrl": "https://docs.continue.dev",
     "faviconUrl": "https://docs.continue.dev/favicon.ico",
   }
 ]
@@ -66,7 +59,7 @@ toc_max_heading_level: 5
 
 - `title`: 文档网站的名称，用来在 UI 中进行识别。
 - `startUrl`: 索引进程开始的 URL 。
-- `rootUrl`: 文档网站的基本 URL ，用来确定哪个页面索引。
+<!-- - `rootUrl`: 文档网站的基本 URL ，用来确定哪个页面索引。 -->
 - `faviconUrl`: 网站 favicon 的 URL ，用来在 UI 中进行视觉识别。
 
 ## 使用 `useChromiumForDocsCrawling` 爬取动态生成的网站

@@ -1,18 +1,24 @@
 import {
   EditorView,
-  TextEditor,
   InputBox,
-  Workbench,
   Key,
-  VSBrowser,
+  TextEditor,
+  Workbench,
 } from "vscode-extension-tester";
 
-import { DEFAULT_TIMEOUT } from "../constants";
-import { TestUtils } from "../TestUtils";
-import { SSHSelectors } from "../selectors/SSH.selectors";
 import { AutocompleteActions } from "../actions/Autocomplete.actions";
+import { DEFAULT_TIMEOUT } from "../constants";
+import { SSHSelectors } from "../selectors/SSH.selectors";
+import { TestUtils } from "../TestUtils";
 
 describe("SSH", function () {
+  if (process.env.IGNORE_SSH_TESTS === "true") {
+    it("Skipping SSH tests", () => {
+      console.log("Skipping SSH tests due to IGNORE_SSH_TESTS being set");
+    });
+    return;
+  }
+
   it("Should display completions", async () => {
     await TestUtils.waitForSuccess(async () => {
       await new Workbench().executeCommand(
@@ -25,7 +31,7 @@ describe("SSH", function () {
 
     await TestUtils.waitForSuccess(
       () => SSHSelectors.connectedToRemoteConfirmationMessage(),
-      DEFAULT_TIMEOUT.XL,
+      DEFAULT_TIMEOUT.MD,
     );
 
     await TestUtils.waitForSuccess(async () => {
@@ -34,7 +40,7 @@ describe("SSH", function () {
       await inputBox.setText("/home/ec2-user/test-folder/main.py");
       await inputBox.selectQuickPick("main.py");
       await inputBox.sendKeys(Key.ENTER);
-    }, DEFAULT_TIMEOUT.XL);
+    }, DEFAULT_TIMEOUT.MD);
 
     const editor = await TestUtils.waitForSuccess(
       async () => (await new EditorView().openEditor("main.py")) as TextEditor,
@@ -46,5 +52,5 @@ describe("SSH", function () {
     await editor.setText(text);
   })
     .timeout(DEFAULT_TIMEOUT.XL)
-    .retries(2);
+    .retries(4);
 });

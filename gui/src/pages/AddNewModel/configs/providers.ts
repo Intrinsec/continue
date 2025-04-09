@@ -111,7 +111,7 @@ export const providers: Partial<Record<string, ProviderInfo>> = {
       models.claude35Sonnet,
       models.claude3Opus,
       models.claude3Sonnet,
-      models.claude3Haiku,
+      models.claude35Haiku,
     ],
     apiKeyUrl: "https://console.anthropic.com/account/keys",
   },
@@ -165,7 +165,8 @@ export const providers: Partial<Record<string, ProviderInfo>> = {
     title: "Scaleway",
     provider: "scaleway",
     refPage: "scaleway",
-    description: "Use the Scaleway Generative APIs to instantly access leading open models",
+    description:
+      "Use the Scaleway Generative APIs to instantly access leading open models",
     longDescription: `Hosted in European data centers, ideal for developers requiring low latency, full data privacy, and compliance with EU AI Act. You can generate your API key in [Scaleway's console](https://console.scaleway.com/generative-api/models). Get started:\n1. Create an API key [here](https://console.scaleway.com/iam/api-keys/)\n2. Paste below\n3. Select a model preset`,
     params: {
       apiKey: "",
@@ -369,7 +370,11 @@ Select the \`GPT-4o\` model below to complete your provider configuration, but n
         required: true,
       },
     ],
-    packages: [models.deepseekCoderApi, models.deepseekChatApi],
+    packages: [
+      models.deepseekCoderApi,
+      models.deepseekChatApi,
+      models.deepseekReasonerApi,
+    ],
     apiKeyUrl: "https://platform.deepseek.com/api_keys",
   },
   together: {
@@ -404,6 +409,72 @@ Select the \`GPT-4o\` model below to complete your provider configuration, but n
     }),
     apiKeyUrl: "https://api.together.xyz/settings/api-keys",
   },
+  ncompass: {
+    title: "nCompass",
+    provider: "ncompass",
+    refPage: "ncompass",
+    description:
+      "Use the nCompass API for extremely fast streaming of open-source models",
+    icon: "ncompass.png",
+    longDescription: `nCompass is an extremely fast inference engine for open-source language models. To get started, obtain an API key from [their console](https://app.ncompass.tech/api-settings).`,
+    tags: [ModelProviderTags.RequiresApiKey, ModelProviderTags.OpenSource],
+    params: {
+      apiKey: "",
+    },
+    collectInputFor: [
+      {
+        inputType: "text",
+        key: "apiKey",
+        label: "API Key",
+        placeholder: "Enter your nCompass API key",
+        required: true,
+      },
+      ...completionParamsInputsConfigs,
+    ],
+    packages: [
+      models.llama318bChat,
+      models.llama3370bChat,
+      models.Qwen25Coder32b,
+    ].map((p) => {
+      p.params.contextLength = 4096;
+      return p;
+    }),
+    apiKeyUrl: "https://app.ncompass.tech/api-settings",
+  },
+  novita: {
+    title: "NovitaAI",
+    provider: "novita",
+    refPage: "novita",
+    description:
+      "Use Novita AI API for extremely fast streaming of open-source models",
+    icon: "novita.png",
+    longDescription: `[Novita AI](https://novita.ai?utm_source=github_continuedev&utm_medium=github_readme&utm_campaign=github_link) offers an affordable, reliable, and simple inference platform with scalable [LLM APIs](https://novita.ai/docs/model-api/reference/introduction.html), empowering developers to build AI applications. To get started with Novita AI:\n1. Obtain an API key from [here](https://novita.ai/settings/key-management?utm_source=github_continuedev&utm_medium=github_readme&utm_campaign=github_link)\n2. Paste below\n3. Select a model preset`,
+    tags: [ModelProviderTags.RequiresApiKey, ModelProviderTags.OpenSource],
+    params: {
+      apiKey: "",
+    },
+    collectInputFor: [
+      {
+        inputType: "text",
+        key: "apiKey",
+        label: "API Key",
+        placeholder: "Enter your Novita AI API key",
+        required: true,
+      },
+      ...completionParamsInputsConfigs,
+    ],
+    packages: [
+      models.llama318BChat,
+      models.mistralChat,
+      models.deepseekR1Chat,
+      models.deepseekV3Chat,
+    ].map((p) => {
+      p.params.contextLength = 4096;
+      return p;
+    }),
+    apiKeyUrl:
+      "https://novita.ai/settings/key-management?utm_source=github_continuedev&utm_medium=github_readme&utm_campaign=github_link",
+  },
   gemini: {
     title: "Google Gemini API",
     provider: "gemini",
@@ -422,7 +493,12 @@ Select the \`GPT-4o\` model below to complete your provider configuration, but n
         required: true,
       },
     ],
-    packages: [models.gemini15Pro, models.geminiPro, models.gemini15Flash],
+    packages: [
+      models.gemini20Flash,
+      models.gemini15Pro,
+      models.geminiPro,
+      models.gemini15Flash,
+    ],
     apiKeyUrl: "https://aistudio.google.com/app/apikey",
   },
   xAI: {
@@ -650,7 +726,7 @@ To get started, [register](https://dataplatform.cloud.ibm.com/registration/stepo
       { ...models.claude35Sonnet, title: "Claude 3.5 Sonnet (trial)" },
       { ...models.gpt4o, title: "GPT-4o (trial)" },
       { ...models.gpt35turbo, title: "GPT-3.5-Turbo (trial)" },
-      { ...models.claude3Haiku, title: "Claude 3 Haiku (trial)" },
+      { ...models.claude35Haiku, title: "Claude 3.5 Haiku (trial)" },
       models.mixtralTrial,
       { ...models.gemini15Pro, title: "Gemini 1.5 Pro (trial)" },
       {
@@ -664,12 +740,12 @@ To get started, [register](https://dataplatform.cloud.ibm.com/registration/stepo
     collectInputFor: [...completionParamsInputsConfigs],
   },
   sambanova: {
-    title: "SambaNova Cloud",
+    title: "SambaNova",
     provider: "sambanova",
     refPage: "sambanova",
     description: "Use SambaNova Cloud for fast inference performance",
     icon: "sambanova.png",
-    longDescription: `The SambaNova Cloud is a cloud platform for running large AI models with the world record Llama 3.1 70B/405B performance. You can sign up [here](https://cloud.sambanova.ai/)`,
+    longDescription: `The SambaNova Cloud is a cloud platform for running large open source AI models with the world record performance and zero data retention. You can sign up [here](https://cloud.sambanova.ai/)`,
     tags: [ModelProviderTags.RequiresApiKey, ModelProviderTags.OpenSource],
     params: {
       apiKey: "",
@@ -684,10 +760,22 @@ To get started, [register](https://dataplatform.cloud.ibm.com/registration/stepo
       },
       ...completionParamsInputsConfigs,
     ],
-    packages: [models.llama31Chat].map((p) => {
-      p.params.contextLength = 4096;
-      return p;
-    }),
+    packages:[
+      models.qwen25Coder32BInstruct,
+      models.llama3370BInstruct,
+      models.llama318BInstruct,
+      models.llama3170BInstruct,
+      models.llama31405BInstruct,
+      models.llama31Tulu3405B,
+      models.llama321BInstruct,
+      models.llama323BInstruct,
+      models.llama3211BInstruct,
+      models.llama3290BInstruct,
+      models.qwen2572BInstruct,
+      models.qwq32BPreview,
+      models.deepseekR1DistillLlama70B,
+      models.deepseekR1,
+    ],
     apiKeyUrl: "https://cloud.sambanova.ai/apis",
   },
   cerebras: {
@@ -755,7 +843,7 @@ To get started, [register](https://dataplatform.cloud.ibm.com/registration/stepo
   askSage: {
     title: "Ask Sage",
     provider: "askSage",
-    icon: "ask-Sage.png",
+    icon: "ask-sage.png",
     description:
       "The Ask Sage API provides seamless access to LLMs including OpenAI, Anthropic, Meta, Mistral, and more.",
     longDescription: `To get access to the Ask Sage API, obtain your API key from the [Ask Sage platform](https://chat.asksage.ai/) for all other models.`,
@@ -782,14 +870,24 @@ To get started, [register](https://dataplatform.cloud.ibm.com/registration/stepo
       ...completionParamsInputsConfigs,
     ],
     packages: [
-      models.gpt4gov,
-      models.gpt4ogov,
+      models.asksagegpt4ogov,
+      models.asksagegpt4ominigov,
+      models.asksagegpt4gov,
+      models.asksagegpt35gov,
       models.gpt4o,
       models.gpt4omini,
+      models.asksagegpt4,
+      models.asksagegpt432,
+      models.asksagegpto1,
+      models.asksagegpto1mini,
       models.gpt35turbo,
+      models.asksageclaude35gov,
       models.claude35Sonnet,
       models.claude3Opus,
       models.claude3Sonnet,
+      models.grokBeta,
+      models.asksagegroqllama33,
+      models.asksagegroq70b,
       models.mistralLarge,
       models.llama370bChat,
       models.gemini15Pro,
@@ -818,6 +916,10 @@ To get started, [register](https://dataplatform.cloud.ibm.com/registration/stepo
     icon: "nebius.png",
     tags: [ModelProviderTags.RequiresApiKey, ModelProviderTags.OpenSource],
     packages: [
+      models.deepseekR1Chat,
+      models.deepseekV3Chat,
+      models.QwenQwQ_32b_preview,
+      models.Qwen25Coder_32b,
       models.llama318bChat,
       models.llama3170bChat,
       models.llama31405bChat,

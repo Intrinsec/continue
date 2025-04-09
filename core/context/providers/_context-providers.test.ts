@@ -1,15 +1,14 @@
 import fetch from "node-fetch";
 
+import { contextProviderClassFromName } from ".";
 import {
   ContextProviderExtras,
   ContextProviderWithParams,
   IContextProvider,
 } from "../..";
 import { ConfigHandler } from "../../config/ConfigHandler";
-import { contextProviderClassFromName } from ".";
-import { ControlPlaneClient } from "../../control-plane/client";
-import FileSystemIde from "../../util/filesystem";
 import { TEST_DIR } from "../../test/testDir";
+import FileSystemIde from "../../util/filesystem";
 
 const CONTEXT_PROVIDERS_TO_TEST: ContextProviderWithParams[] = [
   { name: "diff", params: {} },
@@ -31,18 +30,22 @@ async function getContextProviderExtras(
     ide,
     ideSettingsPromise,
     async (text) => {},
-    new ControlPlaneClient(Promise.resolve(undefined)),
+    Promise.resolve(undefined),
   );
-  const config = await configHandler.loadConfig();
+  await configHandler.initializedPromise;
+  const { config } = await configHandler.loadConfig();
+  if (!config) {
+    throw new Error("Config not found");
+  }
 
   return {
     fullInput,
     ide,
     config,
-    embeddingsProvider: config.embeddingsProvider,
+    embeddingsProvider: config.selectedModelByRole.embed,
     fetch: fetch,
     llm: config.models[0],
-    reranker: config.reranker,
+    reranker: config.selectedModelByRole.rerank,
     selectedCode: [],
   };
 }

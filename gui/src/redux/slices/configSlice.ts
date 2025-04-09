@@ -1,55 +1,88 @@
+import { ConfigResult, ConfigValidationError } from "@continuedev/config-yaml";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { BrowserSerializedContinueConfig } from "core";
-import { ConfigValidationError } from "core/config/validation";
 import { DEFAULT_MAX_TOKENS } from "core/llm/constants";
 
 export type ConfigState = {
   configError: ConfigValidationError[] | undefined;
   config: BrowserSerializedContinueConfig;
-  defaultModelTitle: string;
+  defaultModelTitle?: string;
+};
+
+const EMPTY_CONFIG: BrowserSerializedContinueConfig = {
+  slashCommands: [
+    {
+      name: "share",
+      description: "Export the current chat session to markdown",
+    },
+    {
+      name: "cmd",
+      description: "Generate a shell command",
+    },
+  ],
+  contextProviders: [],
+  models: [],
+  tools: [],
+  mcpServerStatuses: [],
+  usePlatform: true,
+  modelsByRole: {
+    chat: [],
+    apply: [],
+    edit: [],
+    summarize: [],
+    autocomplete: [],
+    rerank: [],
+    embed: [],
+  },
+  selectedModelByRole: {
+    chat: null,
+    apply: null,
+    edit: null,
+    summarize: null,
+    autocomplete: null,
+    rerank: null,
+    embed: null,
+  },
 };
 
 const initialState: ConfigState = {
   configError: undefined,
-  defaultModelTitle: "GPT-4",
-  config: {
-    slashCommands: [
-      {
-        name: "share",
-        description: "Export the current chat session to markdown",
-      },
-      {
-        name: "cmd",
-        description: "Generate a shell command",
-      },
-    ],
-    contextProviders: [],
-    models: [],
-    tools: [],
-  },
+  defaultModelTitle: undefined,
+  config: EMPTY_CONFIG,
 };
 
 export const configSlice = createSlice({
   name: "config",
   initialState,
   reducers: {
-    setConfig: (
+    setConfigResult: (
+      state,
+      {
+        payload: result,
+      }: PayloadAction<ConfigResult<BrowserSerializedContinueConfig>>,
+    ) => {
+      const { config, errors } = result;
+      state.configError = errors;
+
+      // If an error is found in config on save,
+      // We must invalidate the GUI config too,
+      // Since core won't be able to load config
+      // Don't invalidate the loaded config
+      if (!config) {
+        state.config = EMPTY_CONFIG;
+        state.defaultModelTitle = undefined;
+      } else {
+        state.config = config;
+        state.defaultModelTitle =
+          config.models.find((model) => model.title === state.defaultModelTitle)
+            ?.title || config.models[0]?.title;
+      }
+    },
+    updateConfig: (
       state,
       { payload: config }: PayloadAction<BrowserSerializedContinueConfig>,
     ) => {
-      const defaultModelTitle =
-        config.models.find((model) => model.title === state.defaultModelTitle)
-          ?.title ||
-        config.models[0]?.title ||
-        "";
       state.config = config;
-      state.defaultModelTitle = defaultModelTitle;
-    },
-    setConfigError: (
-      state,
-      { payload: error }: PayloadAction<ConfigValidationError[] | undefined>,
-    ) => {
-      state.configError = error;
     },
     setDefaultModel: (
       state,
@@ -62,6 +95,20 @@ export const configSlice = createSlice({
       return {
         ...state,
         defaultModelTitle: payload.title,
+      };
+    },
+    cycleDefaultModel: (state, { payload }: PayloadAction<"next" | "prev">) => {
+      const currentIndex = state.config.models.findIndex(
+        (model) => model.title === state.defaultModelTitle,
+      );
+      const nextIndex =
+        (currentIndex +
+          (payload === "next" ? 1 : -1) +
+          state.config.models.length) %
+        state.config.models.length;
+      return {
+        ...state,
+        defaultModelTitle: state.config.models[nextIndex].title,
       };
     },
   },
@@ -83,8 +130,12 @@ export const configSlice = createSlice({
   },
 });
 
-export const { setDefaultModel, setConfig, setConfigError } =
-  configSlice.actions;
+export const {
+  setDefaultModel,
+  cycleDefaultModel,
+  updateConfig,
+  setConfigResult,
+} = configSlice.actions;
 
 export const {
   selectDefaultModel,

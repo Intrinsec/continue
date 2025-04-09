@@ -1,29 +1,22 @@
-import * as Tabs from "./tabs";
-import { TabTitle, OnboardingCardTabs } from "./components/OnboardingCardTabs";
-import { XMarkIcon } from "@heroicons/react/24/outline";
-import styled from "styled-components";
-import { CloseButton, defaultBorderRadius, vscInputBackground } from "../";
+import { useAppSelector } from "../../redux/hooks";
 import { getLocalStorage, setLocalStorage } from "../../util/localStorage";
+import { ReusableCard } from "../ReusableCard";
+import { OnboardingCardTabs, TabTitle } from "./components/OnboardingCardTabs";
 import { useOnboardingCard } from "./hooks/useOnboardingCard";
-
-const StyledCard = styled.div`
-  margin: auto;
-  border-radius: ${defaultBorderRadius};
-  background-color: ${vscInputBackground};
-  box-shadow:
-    0 20px 25px -5px rgb(0 0 0 / 0.1),
-    0 8px 10px -6px rgb(0 0 0 / 0.1);
-`;
+import * as Tabs from "./tabs";
 
 export interface OnboardingCardState {
   show?: boolean;
   activeTab?: TabTitle;
 }
 
-export type OnboardingCardProps = Pick<OnboardingCardState, "activeTab">;
+interface OnboardingCardProps {
+  isDialog?: boolean;
+}
 
-export function OnboardingCard(props: OnboardingCardProps) {
+export function OnboardingCard({ isDialog }: OnboardingCardProps) {
   const onboardingCard = useOnboardingCard();
+  const config = useAppSelector((store) => store.config.config);
 
   function renderTabContent() {
     switch (onboardingCard.activeTab) {
@@ -34,7 +27,7 @@ export function OnboardingCard(props: OnboardingCardProps) {
       case "Local":
         return <Tabs.Local />;
       default:
-        return null;
+        return <Tabs.Quickstart />;
     }
   }
 
@@ -43,15 +36,16 @@ export function OnboardingCard(props: OnboardingCardProps) {
   }
 
   return (
-    <StyledCard className="xs:py-4 xs:px-4 relative px-2 py-3">
+    <ReusableCard
+      showCloseButton={!isDialog && !!config.models.length}
+      onClose={() => onboardingCard.close()}
+      testId="onboarding-card"
+    >
       <OnboardingCardTabs
-        activeTab={onboardingCard.activeTab}
+        activeTab={onboardingCard.activeTab || "Best"}
         onTabClick={onboardingCard.setActiveTab}
       />
-      <CloseButton onClick={onboardingCard.close}>
-        <XMarkIcon className="hidden h-5 w-5 sm:flex" />
-      </CloseButton>
-      <div className="content py-4">{renderTabContent()}</div>
-    </StyledCard>
+      {renderTabContent()}
+    </ReusableCard>
   );
 }

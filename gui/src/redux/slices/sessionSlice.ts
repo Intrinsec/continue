@@ -18,11 +18,13 @@ import {
   PromptLog,
   Session,
   SessionMetadata,
-  ToolCall,
+  ToolCallDelta,
+  ToolCallState,
 } from "core";
 import { NEW_SESSION_TITLE } from "core/util/constants";
 import { incrementalParseJson } from "core/util/incrementalParseJson";
 import { renderChatMessage } from "core/util/messageContent";
+import { findUriInDirs, getUriPathBasename } from "core/util/uri";
 import { v4 as uuidv4 } from "uuid";
 import { RootState } from "../store";
 import { streamResponseThunk } from "../thunks/streamResponse";
@@ -41,11 +43,9 @@ type SessionState = {
   isStreaming: boolean;
   title: string;
   id: string;
-  selectedProfileId: string;
   streamAborter: AbortController;
   codeToEdit: CodeToEdit[];
   curCheckpointIndex: number;
-  currentMainEditorContent?: JSONContent;
   mainEditorContentTrigger?: JSONContent | undefined;
   symbols: FileSymbolMap;
   mode: MessageModes;
@@ -53,6 +53,7 @@ type SessionState = {
     states: ApplyState[];
     curIndex: number;
   };
+  newestCodeblockForInput: Record<string, string>;
 };
 
 function isCodeToEditEqual(a: CodeToEdit, b: CodeToEdit) {
@@ -80,7 +81,6 @@ const initialState: SessionState = {
   isStreaming: false,
   title: NEW_SESSION_TITLE,
   id: uuidv4(),
-  selectedProfileId: "local",
   curCheckpointIndex: 0,
   streamAborter: new AbortController(),
   codeToEdit: [],
@@ -91,6 +91,7 @@ const initialState: SessionState = {
     curIndex: 0,
   },
   lastSessionId: undefined,
+  newestCodeblockForInput: {},
 };
 
 export const sessionSlice = createSlice({
@@ -115,7 +116,10 @@ export const sessionSlice = createSlice({
       state.isStreaming = true;
     },
     setIsGatheringContext: (state, { payload }: PayloadAction<boolean>) => {
-      state.history.at(-1).isGatheringContext = payload;
+      const curMessage = state.history.at(-1);
+      if (curMessage) {
+        curMessage.isGatheringContext = payload;
+      }
     },
     clearLastEmptyResponse: (state) => {
       if (state.history.length < 2) {
@@ -128,6 +132,8 @@ export const sessionSlice = createSlice({
         state.mainEditorContentTrigger =
           state.history[state.history.length - 2].editorState;
         state.history = state.history.slice(0, -2);
+        // TODO is this logic correct for tool use conversations?
+        // Maybe slice at last index of "user" role message?
       }
     },
     // Trigger value picked up by editor with isMainInput to set its content
@@ -161,13 +167,13 @@ export const sessionSlice = createSlice({
       {
         payload,
       }: PayloadAction<{
-        index?: number;
+        index: number;
         editorState: JSONContent;
       }>,
     ) => {
       const { index, editorState } = payload;
 
-      if (typeof index === "number" && index < state.history.length) {
+      if (state.history.length && index < state.history.length) {
         // Resubmission - update input message, truncate history after resubmit with new empty response message
         if (index % 2 === 1) {
           console.warn(
@@ -178,6 +184,7 @@ export const sessionSlice = createSlice({
 
         historyItem.message.content = ""; // IMPORTANT - this is quickly updated by resolveEditorContent based on editor state prior to streaming
         historyItem.editorState = payload.editorState;
+        historyItem.contextItems = [];
 
         state.history = state.history.slice(0, index + 1).concat({
           message: {
@@ -230,7 +237,7 @@ export const sessionSlice = createSlice({
       }>,
     ) => {
       const { index, updates } = payload;
-      if (!state.history[index]) {
+      if (index !== 0 && !state.history[index]) {
         console.error(
           `attempting to update history item at nonexistent index ${index}`,
           updates,
@@ -277,72 +284,149 @@ export const sessionSlice = createSlice({
     },
     streamUpdate: (state, action: PayloadAction<ChatMessage[]>) => {
       if (state.history.length) {
+        function toolCallDeltaToState(
+          toolCallDelta: ToolCallDelta,
+        ): ToolCallState {
+          const [_, parsedArgs] = incrementalParseJson(
+            toolCallDelta.function?.arguments ?? "{}",
+          );
+          return {
+            status: "generating",
+            toolCall: {
+              id: toolCallDelta.id ?? "",
+              type: toolCallDelta.type ?? "function",
+              function: {
+                name: toolCallDelta.function?.name ?? "",
+                arguments: toolCallDelta.function?.arguments ?? "",
+              },
+            },
+            toolCallId: toolCallDelta.id ?? "",
+            parsedArgs,
+          };
+        }
+
         for (const message of action.payload) {
-          const lastMessage = state.history[state.history.length - 1];
+          const lastItem = state.history[state.history.length - 1];
+          const lastMessage = lastItem.message;
+
+          if (message.role === "thinking" && message.redactedThinking) {
+            console.log("add redacted_thinking blocks");
+
+            state.history.push({
+              message: {
+                role: "thinking",
+                content: "internal reasoning is hidden due to safety reasons",
+                redactedThinking: message.redactedThinking,
+                id: uuidv4(),
+              },
+              contextItems: [],
+            });
+            continue;
+          }
 
           if (
-            message.role &&
-            (lastMessage.message.role !== message.role ||
-              // This is when a tool call comes after assistant text
-              (lastMessage.message.content !== "" &&
-                message.role === "assistant" &&
-                message.toolCalls?.length))
+            lastMessage.role !== message.role ||
+            // This is for when a tool call comes immediately before/after tool call
+            (lastMessage.role === "assistant" &&
+              message.role === "assistant" &&
+              // Last message isn't completely new
+              !(!lastMessage.toolCalls?.length && !lastMessage.content) &&
+              // And there's a difference in tool call presence
+              (lastMessage.toolCalls?.length ?? 0) !==
+                (message.toolCalls?.length ?? 0))
           ) {
             // Create a new message
             const historyItem: ChatHistoryItemWithMessageId = {
               message: {
                 ...message,
+                content: renderChatMessage(message),
                 id: uuidv4(),
               },
               contextItems: [],
             };
-
-            if (message.role === "assistant" && message.toolCalls) {
-              const [_, parsedArgs] = incrementalParseJson(
-                message.toolCalls[0].function.arguments,
-              );
-              historyItem.toolCallState = {
-                status: "generating",
-                toolCall: message.toolCalls[0] as ToolCall,
-                toolCallId: message.toolCalls[0].id,
-                parsedArgs,
-              };
+            if (message.role === "assistant" && message.toolCalls?.[0]) {
+              const toolCallDelta = message.toolCalls[0];
+              if (
+                toolCallDelta.id &&
+                toolCallDelta.function?.arguments &&
+                toolCallDelta.function?.name &&
+                toolCallDelta.type
+              ) {
+                console.warn(
+                  "Received streamed tool call without required fields",
+                  toolCallDelta,
+                );
+              }
+              historyItem.toolCallState = toolCallDeltaToState(toolCallDelta);
             }
-
             state.history.push(historyItem);
           } else {
             // Add to the existing message
-            const msg = state.history[state.history.length - 1].message;
             if (message.content) {
-              msg.content += renderChatMessage(message);
+              const messageContent = renderChatMessage(message);
+              if (messageContent.includes("<think>")) {
+                lastItem.reasoning = {
+                  startAt: Date.now(),
+                  active: true,
+                  text: messageContent.replace("<think>", "").trim(),
+                };
+              } else if (
+                lastItem.reasoning?.active &&
+                messageContent.includes("</think>")
+              ) {
+                const [reasoningEnd, answerStart] =
+                  messageContent.split("</think>");
+                lastItem.reasoning.text += reasoningEnd.trimEnd();
+                lastItem.reasoning.active = false;
+                lastItem.reasoning.endAt = Date.now();
+                lastMessage.content += answerStart.trimStart();
+              } else if (lastItem.reasoning?.active) {
+                lastItem.reasoning.text += messageContent;
+              } else {
+                // Note this only works because new message above
+                // was already rendered from parts to string
+                lastMessage.content += messageContent;
+              }
+            } else if (message.role === "thinking" && message.signature) {
+              if (lastMessage.role === "thinking") {
+                console.log("add signature", message.signature);
+                lastMessage.signature = message.signature;
+              }
             } else if (
               message.role === "assistant" &&
-              message.toolCalls &&
-              msg.role === "assistant"
+              message.toolCalls?.[0] &&
+              lastMessage.role === "assistant"
             ) {
-              if (!msg.toolCalls) {
-                msg.toolCalls = [];
+              // Intentionally only supporting one tool call for now.
+              const toolCallDelta = message.toolCalls[0];
+
+              // Update message tool call with delta data
+              const newArgs =
+                (lastMessage.toolCalls?.[0]?.function?.arguments ?? "") +
+                (toolCallDelta.function?.arguments ?? "");
+              if (lastMessage.toolCalls?.[0]) {
+                lastMessage.toolCalls[0].function = {
+                  name:
+                    toolCallDelta.function?.name ??
+                    lastMessage.toolCalls[0].function?.name ??
+                    "",
+                  arguments: newArgs,
+                };
+              } else {
+                lastMessage.toolCalls = [toolCallDelta];
               }
-              message.toolCalls.forEach((toolCall, i) => {
-                if (msg.toolCalls.length <= i) {
-                  msg.toolCalls.push(toolCall);
-                } else {
-                  msg.toolCalls[i].function.arguments +=
-                    toolCall.function.arguments;
 
-                  const [_, parsedArgs] = incrementalParseJson(
-                    msg.toolCalls[i].function.arguments,
-                  );
+              // Update current tool call state
+              if (!lastItem.toolCallState) {
+                console.warn(
+                  "Received streamed tool call response prior to initial tool call delta",
+                );
+                lastItem.toolCallState = toolCallDeltaToState(toolCallDelta);
+              }
 
-                  state.history[
-                    state.history.length - 1
-                  ].toolCallState.parsedArgs = parsedArgs;
-                  state.history[
-                    state.history.length - 1
-                  ].toolCallState.toolCall.function.arguments +=
-                    toolCall.function.arguments;
-                }
-              });
+              const [_, parsedArgs] = incrementalParseJson(newArgs);
+              lastItem.toolCallState.parsedArgs = parsedArgs;
+              lastItem.toolCallState.toolCall.function.arguments = newArgs;
             }
           }
         }
@@ -369,7 +453,6 @@ export const sessionSlice = createSlice({
         state.curCheckpointIndex = 0;
       }
     },
-
     updateSessionTitle: (state, { payload }: PayloadAction<string>) => {
       state.title = payload;
     },
@@ -429,17 +512,21 @@ export const sessionSlice = createSlice({
         return { ...item, editing: false };
       });
 
-      const base = payload.rangeInFileWithContents.filepath
-        .split(/[\\/]/)
-        .pop();
+      const { relativePathOrBasename } = findUriInDirs(
+        payload.rangeInFileWithContents.filepath,
+        window.workspacePaths ?? [],
+      );
+      const fileName = getUriPathBasename(
+        payload.rangeInFileWithContents.filepath,
+      );
 
       const lineNums = `(${
         payload.rangeInFileWithContents.range.start.line + 1
       }-${payload.rangeInFileWithContents.range.end.line + 1})`;
 
       contextItems.push({
-        name: `${base} ${lineNums}`,
-        description: payload.rangeInFileWithContents.filepath,
+        name: `${fileName} ${lineNums}`,
+        description: relativePathOrBasename,
         id: {
           providerTitle: "code",
           itemId: uuidv4(),
@@ -447,25 +534,26 @@ export const sessionSlice = createSlice({
         content: payload.rangeInFileWithContents.contents,
         editing: true,
         editable: true,
+        uri: {
+          type: "file",
+          value: payload.rangeInFileWithContents.filepath,
+        },
       });
 
       state.history[state.history.length - 1].contextItems = contextItems;
     },
-    setSelectedProfileId: (state, { payload }: PayloadAction<string>) => {
-      return {
-        ...state,
-        selectedProfileId: payload,
-      };
-    },
-    setCurCheckpointIndex: (state, { payload }: PayloadAction<number>) => {
-      state.curCheckpointIndex = payload;
-    },
+
     updateCurCheckpoint: (
       state,
       { payload }: PayloadAction<{ filepath: string; content: string }>,
     ) => {
-      state.history[state.curCheckpointIndex].checkpoint[payload.filepath] =
-        payload.content;
+      const checkpoint = state.history[state.curCheckpointIndex].checkpoint;
+      if (checkpoint) {
+        checkpoint[payload.filepath] = payload.content;
+      }
+    },
+    setCurCheckpointIndex: (state, { payload }: PayloadAction<number>) => {
+      state.curCheckpointIndex = payload;
     },
     updateApplyState: (state, { payload }: PayloadAction<ApplyState>) => {
       const applyState = state.codeBlockApplyStates.states.find(
@@ -546,6 +634,25 @@ export const sessionSlice = createSlice({
     setMode: (state, action: PayloadAction<MessageModes>) => {
       state.mode = action.payload;
     },
+    cycleMode: (state, action: PayloadAction<{ isJetBrains: boolean }>) => {
+      const modes = action.payload.isJetBrains
+        ? ["chat", "edit", "agent"]
+        : ["chat", "agent"];
+      const currentIndex = modes.indexOf(state.mode);
+      const nextIndex = (currentIndex + 1) % modes.length;
+      state.mode = modes[nextIndex] as MessageModes;
+    },
+    setNewestCodeblocksForInput: (
+      state,
+      {
+        payload,
+      }: PayloadAction<{
+        inputId: string;
+        contextItemId: string;
+      }>,
+    ) => {
+      state.newestCodeblockForInput[payload.inputId] = payload.contextItemId;
+    },
   },
   selectors: {
     selectIsGatheringContext: (state) => {
@@ -554,6 +661,9 @@ export const sessionSlice = createSlice({
     },
     selectIsInEditMode: (state) => {
       return state.mode === "edit";
+    },
+    selectCurrentMode: (state) => {
+      return state.mode;
     },
     selectIsSingleRangeEditOrInsertion: (state) => {
       if (state.mode !== "edit") {
@@ -568,6 +678,9 @@ export const sessionSlice = createSlice({
     },
     selectHasCodeToEdit: (state) => {
       return state.codeToEdit.length > 0;
+    },
+    selectUseTools: (state) => {
+      return state.mode === "agent";
     },
   },
   extraReducers: (builder) => {
@@ -619,7 +732,6 @@ export const {
   updateHistoryItemAtIndex,
   clearLastEmptyResponse,
   setMainEditorContentTrigger,
-  setSelectedProfileId,
   deleteMessage,
   setIsGatheringContext,
   updateCurCheckpoint,
@@ -640,13 +752,17 @@ export const {
   addSessionMetadata,
   updateSessionMetadata,
   deleteSessionMetadata,
+  setNewestCodeblocksForInput,
+  cycleMode,
 } = sessionSlice.actions;
 
 export const {
   selectIsGatheringContext,
   selectIsInEditMode,
+  selectCurrentMode,
   selectIsSingleRangeEditOrInsertion,
   selectHasCodeToEdit,
+  selectUseTools,
 } = sessionSlice.selectors;
 
 export default sessionSlice.reducer;

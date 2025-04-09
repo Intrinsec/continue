@@ -1,15 +1,18 @@
-import { useState, useEffect, useRef } from "react";
+import { ContextSubmenuItemWithProvider } from "core";
+import { useEffect, useRef, useState } from "react";
 import {
-  ContextSubmenuItemWithProvider,
-  useSubmenuContextProviders,
-} from "../../context/SubmenuContextProviders";
-import { Combobox } from "@headlessui/react";
-import FileIcon from "../FileIcon";
+  Combobox,
+  ComboboxButton,
+  ComboboxInput,
+  ComboboxOption,
+  ComboboxOptions,
+} from "../../components/ui/Combobox";
+import { useSubmenuContextProviders } from "../../context/SubmenuContextProviders";
 import { useAppSelector } from "../../redux/hooks";
-
+import FileIcon from "../FileIcon";
 export interface AddFileComboboxProps {
-  onSelect: (filepaths: string[]) => void;
-  onEscape: () => void;
+  onSelect: (filepaths: string[]) => void | Promise<void>;
+  onEscape: () => void | Promise<void>;
 }
 
 export default function AddFileCombobox({
@@ -50,14 +53,14 @@ export default function AddFileCombobox({
         value={selectedFiles}
         onChange={(files) => {
           setSelectedFiles(files);
-          onSelect(files.map((file) => file.id));
+          void onSelect(files.map((file) => file.id));
           buttonRef.current?.click();
         }}
       >
         {({ open }) => (
           <div className="relative">
-            <Combobox.Button className="hidden" ref={buttonRef} />
-            <Combobox.Input
+            <ComboboxButton className="hidden" ref={buttonRef} />
+            <ComboboxInput
               ref={inputRef}
               onClick={() => {
                 if (!open) {
@@ -67,26 +70,26 @@ export default function AddFileCombobox({
               onFocus={() => {
                 buttonRef.current?.click();
               }}
-              className="bg-vsc-background border-lightgray text-vsc-foreground box-border w-full rounded border border-solid py-0.5 pl-2 focus:outline-none"
+              className="bg-vsc-background border-lightgray text-vsc-foreground box-border w-full rounded border border-solid py-0.5 pl-2 text-xs focus:outline-none"
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Type to search files..."
               onKeyDown={(e) => {
                 if (e.key === "Escape" && !open) {
-                  onEscape();
+                  void onEscape();
                 }
               }}
             />
 
-            <Combobox.Options className="no-scrollbar bg-vsc-editor-background border-lightgray/50 absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto overflow-x-hidden rounded-md border border-solid px-1 py-0 pl-0 pr-5 shadow-lg focus:outline-none">
+            <ComboboxOptions className="no-scrollbar bg-vsc-editor-background border-lightgray/50 absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto overflow-x-hidden rounded-md border border-solid px-1 py-0 pl-0 pr-5 shadow-lg focus:outline-none">
               {filteredFiles.length > 0 ? (
                 filteredFiles.map((file) => (
-                  <Combobox.Option
+                  <ComboboxOption
                     key={file.id}
                     value={file}
                     className={({ active }) =>
                       `relative flex w-full cursor-pointer px-2 py-1 text-left text-xs ${
                         active
-                          ? "bg-vsc-list-active-background text-vsc-list-active-foreground"
+                          ? "bg-list-active text-list-active-foreground"
                           : ""
                       }`
                     }
@@ -111,14 +114,14 @@ export default function AddFileCombobox({
                         </span>
                       </div>
                     )}
-                  </Combobox.Option>
+                  </ComboboxOption>
                 ))
               ) : (
-                <div className="text-vsc-list-active-foreground0 px-2 py-1 text-xs">
+                <div className="text-list-active-foreground px-2 py-1 text-xs">
                   No results
                 </div>
               )}
-            </Combobox.Options>
+            </ComboboxOptions>
           </div>
         )}
       </Combobox>

@@ -1,36 +1,14 @@
-import fs from "node:fs";
-import path from "path";
-
 import { FromWebviewProtocol, ToWebviewProtocol } from "core/protocol";
-import { WebviewMessengerResult } from "core/protocol/util";
-import { extractMinimalStackTraceInfo } from "core/util/extractMinimalStackTraceInfo";
 import { Message } from "core/protocol/messenger";
+import { extractMinimalStackTraceInfo } from "core/util/extractMinimalStackTraceInfo";
 import { Telemetry } from "core/util/posthog";
 import { v4 as uuidv4 } from "uuid";
 import * as vscode from "vscode";
 
 import { IMessenger } from "../../../core/protocol/messenger";
 
+import { handleLLMError } from "./util/errorHandling";
 import { showFreeTrialLoginMessage } from "./util/messages";
-import { getExtensionUri } from "./util/vscode";
-
-export async function showTutorial() {
-  const tutorialPath = path.join(
-    getExtensionUri().fsPath,
-    "continue_tutorial.py",
-  );
-  // Ensure keyboard shortcuts match OS
-  if (process.platform !== "darwin") {
-    let tutorialContent = fs.readFileSync(tutorialPath, "utf8");
-    tutorialContent = tutorialContent.replace("⌘", "^").replace("Cmd", "Ctrl");
-    fs.writeFileSync(tutorialPath, tutorialContent);
-  }
-
-  const doc = await vscode.workspace.openTextDocument(
-    vscode.Uri.file(tutorialPath),
-  );
-  await vscode.window.showTextDocument(doc, { preview: false });
-}
 
 export class VsCodeWebviewProtocol
   implements IMessenger<FromWebviewProtocol, ToWebviewProtocol>
@@ -73,47 +51,61 @@ export class VsCodeWebviewProtocol
     this._webview = webView;
     this._webviewListener?.dispose();
 
-    this._webviewListener = this._webview.onDidReceiveMessage(async (msg) => {
-      if (!msg.messageType || !msg.messageId) {
+    const handleMessage = async (msg: Message): Promise<void> => {
+      if (!("messageType" in msg) || !("messageId" in msg)) {
         throw new Error(`Invalid webview protocol msg: ${JSON.stringify(msg)}`);
       }
 
-      const respond = (message: WebviewMessengerResult<any>) =>
+      const respond = (message: any) =>
         this.send(msg.messageType, message, msg.messageId);
 
-      const handlers = this.listeners.get(msg.messageType) || [];
+      const handlers =
+        this.listeners.get(msg.messageType as keyof FromWebviewProtocol) || [];
       for (const handler of handlers) {
         try {
           const response = await handler(msg);
+          // For generator types e.g. llm/streamChat
           if (
             response &&
             typeof response[Symbol.asyncIterator] === "function"
           ) {
             let next = await response.next();
             while (!next.done) {
-              respond(next.value);
+              respond({
+                done: false,
+                content: next.value,
+                status: "success",
+              });
               next = await response.next();
             }
             respond({
               done: true,
-              content: next.value?.content,
+              content: next.value,
               status: "success",
             });
           } else {
-            respond({ done: true, content: response || {}, status: "success" });
+            respond({ done: true, content: response, status: "success" });
           }
         } catch (e: any) {
-          respond({ done: true, error: e, status: "error" });
+          if (handleLLMError(e)) {
+            // Respond without an error, so the UI doesn't show the error component
+            respond({ done: true, status: "error" });
+          }
+          let message = e.message;
+          respond({ done: true, error: message, status: "error" });
 
+          const stringified = JSON.stringify({ msg }, null, 2);
           console.error(
-            `Error handling webview message: ${JSON.stringify(
-              { msg },
-              null,
-              2,
-            )}\n\n${e}`,
+            `Error handling webview message: ${stringified}\n\n${e}`,
           );
 
-          let message = e.message;
+          if (
+            stringified.includes("llm/streamChat") ||
+            stringified.includes("chatDescriber/describe")
+          ) {
+            return;
+          }
+
           if (e.cause) {
             if (e.cause.name === "ConnectTimeoutError") {
               message = `Connection timed out. If you expect it to take a long time to connect, you can increase the timeout in config.json by setting "requestOptions": { "timeout": 10000 }. You can find the full config reference here: https://docs.continue.dev/reference/config`;
@@ -157,32 +149,16 @@ export class VsCodeWebviewProtocol
               },
               false,
             );
-            vscode.window
-              .showErrorMessage(
-                message.split("\n\n")[0],
-                "Show Logs",
-                "Troubleshooting",
-              )
-              .then((selection) => {
-                if (selection === "Show Logs") {
-                  vscode.commands.executeCommand(
-                    "workbench.action.toggleDevTools",
-                  );
-                } else if (selection === "Troubleshooting") {
-                  vscode.env.openExternal(
-                    vscode.Uri.parse(
-                      "https://docs.continue.dev/troubleshooting",
-                    ),
-                  );
-                }
-              });
           }
         }
       }
-    });
+    };
+
+    this._webviewListener = this._webview.onDidReceiveMessage(handleMessage);
   }
 
   constructor(private readonly reloadConfig: () => void) {}
+
   invoke<T extends keyof FromWebviewProtocol>(
     messageType: T,
     data: FromWebviewProtocol[T][0],
@@ -191,7 +167,7 @@ export class VsCodeWebviewProtocol
     throw new Error("Method not implemented.");
   }
 
-  onError(handler: (error: Error) => void): void {
+  onError(handler: (message: Message, error: Error) => void): void {
     throw new Error("Method not implemented.");
   }
 

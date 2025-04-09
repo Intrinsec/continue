@@ -1,5 +1,14 @@
+import {
+  ConfigResult,
+  DevDataLogEvent,
+  ModelRole,
+} from "@continuedev/config-yaml";
+
 import { AutocompleteInput } from "../autocomplete/util/types";
 import { ProfileDescription } from "../config/ConfigHandler";
+import { OrganizationDescription } from "../config/ProfileLifecycleManager";
+import { SharedConfigSchema } from "../config/sharedConfig";
+import { GlobalContextModelSelections } from "../util/GlobalContext";
 
 import type {
   BrowserSerializedContinueConfig,
@@ -8,30 +17,23 @@ import type {
   ContextItemWithId,
   ContextSubmenuItem,
   DiffLine,
+  DocsIndexingDetails,
+  ExperimentalModelRoles,
   FileSymbolMap,
   IdeSettings,
   LLMFullCompletionOptions,
   ModelDescription,
-  ModelRoles,
+  PromptLog,
   RangeInFile,
   SerializedContinueConfig,
   Session,
   SessionMetadata,
   SiteIndexingConfig,
+  SlashCommandDescription,
   ToolCall,
 } from "../";
 
-export type ProtocolGeneratorType<T> = AsyncGenerator<{
-  done?: boolean;
-  content: T;
-}>;
-
-export type OnboardingModes =
-  | "Local"
-  | "Best"
-  | "Custom"
-  | "Quickstart"
-  | "LocalAfterFreeTrial";
+export type OnboardingModes = "Local" | "Best" | "Custom" | "Quickstart";
 
 export interface ListHistoryOptions {
   offset?: number;
@@ -39,8 +41,6 @@ export interface ListHistoryOptions {
 }
 
 export type ToCoreFromIdeOrWebviewProtocol = {
-  "update/selectTabAutocompleteModel": [string, void];
-
   // Special
   ping: [string, string];
   abort: [undefined, void];
@@ -50,12 +50,12 @@ export type ToCoreFromIdeOrWebviewProtocol = {
   "history/delete": [{ id: string }, void];
   "history/load": [{ id: string }, Session];
   "history/save": [Session, void];
-  "devdata/log": [{ tableName: string; data: any }, void];
+  "devdata/log": [DevDataLogEvent, void];
   "config/addOpenAiKey": [string, void];
   "config/addModel": [
     {
       model: SerializedContinueConfig["models"][number];
-      role?: keyof ModelRoles;
+      role?: keyof ExperimentalModelRoles;
     },
     void,
   ];
@@ -63,12 +63,28 @@ export type ToCoreFromIdeOrWebviewProtocol = {
   "config/ideSettingsUpdate": [IdeSettings, void];
   "config/getSerializedProfileInfo": [
     undefined,
-    { config: BrowserSerializedContinueConfig; profileId: string },
+    {
+      result: ConfigResult<BrowserSerializedContinueConfig>;
+      profileId: string | null;
+    },
   ];
   "config/deleteModel": [{ title: string }, void];
-  "config/reload": [undefined, BrowserSerializedContinueConfig];
-  "config/listProfiles": [undefined, ProfileDescription[]];
+  "config/reload": [undefined, ConfigResult<BrowserSerializedContinueConfig>];
+  "config/listProfiles": [
+    undefined,
+    { profiles: ProfileDescription[] | null; selectedProfileId: string | null },
+  ];
+  "config/refreshProfiles": [undefined, void];
   "config/openProfile": [{ profileId: string | undefined }, void];
+  "config/updateSharedConfig": [SharedConfigSchema, SharedConfigSchema];
+  "config/updateSelectedModel": [
+    {
+      profileId: string;
+      role: ModelRole;
+      title: string | null;
+    },
+    GlobalContextModelSelections,
+  ];
   "context/getContextItems": [
     {
       name: string;
@@ -79,6 +95,12 @@ export type ToCoreFromIdeOrWebviewProtocol = {
     },
     ContextItemWithId[],
   ];
+  "mcp/reloadServer": [
+    {
+      id: string;
+    },
+    void,
+  ];
   "context/getSymbolsForFiles": [{ uris: string[] }, FileSymbolMap];
   "context/loadSubmenuItems": [{ title: string }, ContextSubmenuItem[]];
   "autocomplete/complete": [AutocompleteInput, string[]];
@@ -87,19 +109,6 @@ export type ToCoreFromIdeOrWebviewProtocol = {
   "context/indexDocs": [{ reIndex: boolean }, void];
   "autocomplete/cancel": [undefined, void];
   "autocomplete/accept": [{ completionId: string }, void];
-  "command/run": [
-    {
-      input: string;
-      history: ChatMessage[];
-      modelTitle: string;
-      slashCommandName: string;
-      contextItems: ContextItemWithId[];
-      params: any;
-      historyIndex: number;
-      selectedCode: RangeInFile[];
-    },
-    ProtocolGeneratorType<string>,
-  ];
   "llm/complete": [
     {
       prompt: string;
@@ -109,21 +118,20 @@ export type ToCoreFromIdeOrWebviewProtocol = {
     string,
   ];
   "llm/listModels": [{ title: string }, string[] | undefined];
-  "llm/streamComplete": [
-    {
-      prompt: string;
-      completionOptions: LLMFullCompletionOptions;
-      title: string;
-    },
-    ProtocolGeneratorType<string>,
-  ];
   "llm/streamChat": [
     {
       messages: ChatMessage[];
       completionOptions: LLMFullCompletionOptions;
       title: string;
+      legacySlashCommandData?: {
+        command: SlashCommandDescription;
+        input: string;
+        contextItems: ContextItemWithId[];
+        historyIndex: number;
+        selectedCode: RangeInFile[];
+      };
     },
-    ProtocolGeneratorType<ChatMessage>,
+    AsyncGenerator<ChatMessage, PromptLog>,
   ];
   streamDiffLines: [
     {
@@ -134,7 +142,7 @@ export type ToCoreFromIdeOrWebviewProtocol = {
       language: string | undefined;
       modelTitle: string | undefined;
     },
-    ProtocolGeneratorType<DiffLine>,
+    AsyncGenerator<DiffLine>,
   ];
   "chatDescriber/describe": [
     {
@@ -159,7 +167,6 @@ export type ToCoreFromIdeOrWebviewProtocol = {
     undefined | { dirs?: string[]; shouldClearIndexes?: boolean },
     void,
   ];
-  "index/forceReIndexFiles": [undefined | { files?: string[] }, void];
   "index/indexingProgressBarInitialized": [undefined, void];
   completeOnboarding: [
     {
@@ -168,20 +175,28 @@ export type ToCoreFromIdeOrWebviewProtocol = {
     void,
   ];
 
+  // File changes
+  "files/changed": [{ uris?: string[] }, void];
+  "files/opened": [{ uris?: string[] }, void];
+  "files/created": [{ uris?: string[] }, void];
+  "files/deleted": [{ uris?: string[] }, void];
+  "files/closed": [{ uris?: string[] }, void];
+
   // Docs etc. Indexing. TODO move codebase to this
   "indexing/reindex": [{ type: string; id: string }, void];
   "indexing/abort": [{ type: string; id: string }, void];
   "indexing/setPaused": [{ type: string; id: string; paused: boolean }, void];
   "docs/getSuggestedDocs": [undefined, void];
   "docs/initStatuses": [undefined, void];
-
+  "docs/getDetails": [{ startUrl: string }, DocsIndexingDetails];
   addAutocompleteModel: [{ model: ModelDescription }, void];
 
-  "profiles/switch": [{ id: string }, undefined];
-
-  "auth/getAuthUrl": [undefined, { url: string }];
+  "auth/getAuthUrl": [{ useOnboarding: boolean }, { url: string }];
   "tools/call": [
     { toolCall: ToolCall; selectedModelTitle: string },
     { contextItems: ContextItem[] },
   ];
+  "clipboardCache/add": [{ content: string }, void];
+  "controlPlane/openUrl": [{ path: string; orgSlug: string | undefined }, void];
+  "controlPlane/listOrganizations": [undefined, OrganizationDescription[]];
 };

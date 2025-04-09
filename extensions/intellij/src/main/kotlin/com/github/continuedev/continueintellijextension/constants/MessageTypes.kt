@@ -2,13 +2,6 @@ package com.github.continuedev.continueintellijextension.constants
 
 class MessageTypes {
     companion object {
-        val generatorTypes = listOf(
-            "llm/streamComplete",
-            "llm/streamChat",
-            "command/run",
-            "streamDiffLines"
-        )
-
         val ideMessageTypes = listOf(
             "readRangeInFile",
             "isTelemetryEnabled",
@@ -18,8 +11,6 @@ class MessageTypes {
             "getTerminalContents",
             "getWorkspaceDirs",
             "showLines",
-            "listFolders",
-            "getContinueDir",
             "writeFile",
             "fileExists",
             "showVirtualFile",
@@ -41,25 +32,104 @@ class MessageTypes {
             "getRepoName",
             "listDir",
             "getGitRootPath",
-            "getLastModified",
+            "getFileStats",
             "insertAtCursor",
             "applyToFile",
             "getGitHubAuthToken",
             "setGitHubAuthToken",
-            "pathSep",
             "getControlPlaneSessionInfo",
             "logoutOfControlPlane",
             "getTerminalContents",
             "showToast",
+            "openUrl",
+            
+            // These only come from the GUI for now but should be here to prevent confusion
+            "toggleDevTools",
+            "showTutorial",
+            
+            // These are jetbrains only and only come from the GUI for now
+            // But again including for consistency
+            "copyText",
+            "jetbrains/isOSREnabled",
+            "jetbrains/getColors",
+            "jetbrains/onLoad"
         )
 
+        // Note: If updating these values, make a corresponding update in
+        // core/protocol/passThrough.ts
         val PASS_THROUGH_TO_WEBVIEW = listOf(
             "configUpdate",
             "getDefaultModelTitle",
-            "indexProgress",
+            "indexProgress", // Codebase
+            "indexing/statusUpdate", // Docs, etc.
+            "addContextItem",
             "refreshSubmenuItems",
+            "isContinueInputFocused",
             "didChangeAvailableProfiles",
-            "addContextItem"
+            "setTTSActive",
+            "getWebviewHistoryLength",
+            "getCurrentSessionId",
+            "didCloseFiles",
+            "didSelectOrganization"
+        )
+
+        // Note: If updating these values, make a corresponding update in
+        // core/protocol/passThrough.ts
+        val PASS_THROUGH_TO_CORE = listOf(
+            "abort",
+            "history/list",
+            "history/delete",
+            "history/load",
+            "history/save",
+            "devdata/log",
+            "config/addModel",
+            "config/newPromptFile",
+            "config/ideSettingsUpdate",
+            "config/getSerializedProfileInfo",
+            "config/deleteModel",
+            "config/listProfiles",
+            "config/refreshProfiles",
+            "config/openProfile",
+            "config/updateSharedConfig",
+            "config/updateSelectedModel",
+            "mcp/reloadServer",
+            "context/getContextItems",
+            "context/getSymbolsForFiles",
+            "context/loadSubmenuItems",
+            "context/addDocs",
+            "context/removeDocs",
+            "context/indexDocs",
+            "autocomplete/complete",
+            "autocomplete/cancel",
+            "autocomplete/accept",
+            "tts/kill",
+            "llm/complete",
+            "llm/streamChat",
+            "llm/listModels",
+            "streamDiffLines",
+            "chatDescriber/describe",
+            "stats/getTokensPerDay",
+            "stats/getTokensPerModel",
+            // Codebase
+            "index/setPaused",
+            "index/forceReIndex",
+            "index/forceReIndexFiles",
+            "index/indexingProgressBarInitialized",
+            // Docs, etc.
+            "indexing/reindex",
+            "indexing/abort",
+            "indexing/setPaused",
+            "docs/initStatuses",
+            "docs/getDetails",
+            //
+            "completeOnboarding",
+            "addAutocompleteModel",
+            "didChangeSelectedProfile",
+            "didChangeSelectedOrg",
+            "tools/call",
+            "controlPlane/openUrl",
+            "controlPlane/listOrganizations"
+
         )
     }
 }

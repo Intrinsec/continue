@@ -1,16 +1,17 @@
+import { ChatMessage, DiffLine, ILLM, Prediction } from "../";
 import {
   filterCodeBlockLines,
   filterEnglishLinesAtEnd,
   filterEnglishLinesAtStart,
   filterLeadingAndTrailingNewLineInsertion,
+  removeTrailingWhitespace,
   skipLines,
   stopAtLines,
-} from "../autocomplete/filtering/streamTransforms/lineStream.js";
-import { streamDiff } from "../diff/streamDiff.js";
-import { streamLines } from "../diff/util.js";
-import { ChatMessage, DiffLine, ILLM, Prediction } from "../index.js";
-import { gptEditPrompt } from "../llm/templates/edit.js";
-import { Telemetry } from "../util/posthog.js";
+} from "../autocomplete/filtering/streamTransforms/lineStream";
+import { streamDiff } from "../diff/streamDiff";
+import { streamLines } from "../diff/util";
+import { gptEditPrompt } from "../llm/templates/edit";
+import { Telemetry } from "../util/posthog";
 
 function constructPrompt(
   prefix: string,
@@ -53,7 +54,8 @@ export async function* streamDiffLines(
   llm: ILLM,
   input: string,
   language: string | undefined,
-  onlyOneInsertion?: boolean,
+  onlyOneInsertion: boolean,
+  overridePrompt: ChatMessage[] | undefined,
 ): AsyncGenerator<DiffLine> {
   void Telemetry.capture(
     "inlineEdit",
@@ -76,17 +78,9 @@ export async function* streamDiffLines(
     oldLines = [];
   }
 
-  // Trim end of oldLines, otherwise we have trailing \r on every line for CRLF files
-  oldLines = oldLines.map((line) => line.trimEnd());
-
-  const prompt = constructPrompt(
-    prefix,
-    highlighted,
-    suffix,
-    llm,
-    input,
-    language,
-  );
+  const prompt =
+    overridePrompt ??
+    constructPrompt(prefix, highlighted, suffix, llm, input, language);
   const inept = modelIsInept(llm.model);
 
   const prediction: Prediction = {
@@ -110,6 +104,7 @@ export async function* streamDiffLines(
   lines = filterCodeBlockLines(lines);
   lines = stopAtLines(lines, () => {});
   lines = skipLines(lines);
+  lines = removeTrailingWhitespace(lines);
   if (inept) {
     // lines = fixCodeLlamaFirstLineIndentation(lines);
     lines = filterEnglishLinesAtEnd(lines);

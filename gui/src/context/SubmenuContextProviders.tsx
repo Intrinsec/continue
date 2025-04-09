@@ -1,24 +1,26 @@
-import { ContextSubmenuItem } from "core";
-import { createContext } from "react";
 import {
-  deduplicateArray,
-  getBasename,
-  getUniqueFilePath,
-  groupByLastNPathParts,
-} from "core/util";
+  ContextProviderDescription,
+  ContextProviderName,
+  ContextSubmenuItemWithProvider,
+} from "core";
+import { deduplicateArray, splitCamelCaseAndNonAlphaNumeric } from "core/util";
+import {
+  getShortestUniqueRelativeUriPaths,
+  getUriPathBasename,
+} from "core/util/uri";
 import MiniSearch, { SearchResult } from "minisearch";
 import {
+  createContext,
   useCallback,
   useContext,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
-import { IdeMessengerContext } from "./IdeMessenger";
-import { selectContextProviderDescriptions } from "../redux/selectors";
 import { useWebviewListener } from "../hooks/useWebviewListener";
 import { useAppSelector } from "../redux/hooks";
+import { selectSubmenuContextProviders } from "../redux/selectors";
+import { IdeMessengerContext } from "./IdeMessenger";
 
 const MINISEARCH_OPTIONS = {
   prefix: true,
@@ -27,138 +29,87 @@ const MINISEARCH_OPTIONS = {
 
 const MAX_LENGTH = 70;
 
-export interface ContextSubmenuItemWithProvider extends ContextSubmenuItem {
-  providerTitle: string;
-}
-
 interface SubtextContextProvidersContextType {
   getSubmenuContextItems: (
     providerTitle: string | undefined,
     query: string,
-  ) => (ContextSubmenuItem & { providerTitle: string })[];
-  addItem: (providerTitle: string, item: ContextSubmenuItem) => void;
+  ) => ContextSubmenuItemWithProvider[];
 }
 
 const initialContextProviders: SubtextContextProvidersContextType = {
   getSubmenuContextItems: () => [],
-  addItem: () => {},
 };
 
 const SubmenuContextProvidersContext =
   createContext<SubtextContextProvidersContextType>(initialContextProviders);
-
-function isOpenFilesChanged(
-  newFiles: { id: string }[],
-  oldFiles: { id: string }[],
-) {
-  if (newFiles.length > oldFiles.length) {
-    return true;
-  }
-  for (let i = 0; i < newFiles.length; ++i) {
-    if (newFiles[i].id !== oldFiles[i].id) return true;
-  }
-  return false;
-}
 
 export const SubmenuContextProvidersProvider = ({
   children,
 }: {
   children: React.ReactNode;
 }) => {
-  const [minisearches, setMinisearches] = useState<{
-    [id: string]: MiniSearch;
-  }>({});
-  const [fallbackResults, setFallbackResults] = useState<{
-    [id: string]: ContextSubmenuItem[];
-  }>({});
-
-  const contextProviderDescriptions = useAppSelector(
-    selectContextProviderDescriptions,
-  );
+  const ideMessenger = useContext(IdeMessengerContext);
+  const submenuContextProviders = useAppSelector(selectSubmenuContextProviders);
   const disableIndexing = useAppSelector(
     (store) => store.config.config.disableIndexing,
   );
 
-  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [autoLoadTriggered, setAutoLoadTriggered] = useState(false);
+  const [minisearches, setMinisearches] = useState<{
+    [id: string]: MiniSearch<ContextSubmenuItemWithProvider>;
+  }>({});
+  const [fallbackResults, setFallbackResults] = useState<{
+    [id: string]: ContextSubmenuItemWithProvider[];
+  }>({});
 
-  const config = useAppSelector((store) => store.config.config);
-
-  const ideMessenger = useContext(IdeMessengerContext);
-
-  const getOpenFilesItems = useCallback(async () => {
-    const openFiles = await ideMessenger.ide.getOpenFiles();
-    const openFileGroups = groupByLastNPathParts(openFiles, 2);
-
-    return openFiles.map((file) => ({
-      id: file,
-      title: getBasename(file),
-      description: getUniqueFilePath(file, openFileGroups),
-      providerTitle: "file",
-    }));
-  }, [ideMessenger]);
-
-  useWebviewListener("refreshSubmenuItems", async (data) => {
-    if (!isLoading) {
-      setInitialLoadComplete(false);
-      setAutoLoadTriggered((prev) => !prev); // Toggle to trigger effect
-    }
-  });
-
-  useWebviewListener("updateSubmenuItems", async (data) => {
-    const minisearch = new MiniSearch<ContextSubmenuItem>({
-      fields: ["title", "description"],
-      storeFields: ["id", "title", "description"],
-    });
-
-    minisearch.addAll(data.submenuItems);
-
-    setMinisearches((prev) => ({ ...prev, [data.provider]: minisearch }));
-
-    if (data.provider === "file") {
-      const openFiles = await getOpenFilesItems();
-      setFallbackResults((prev) => ({
-        ...prev,
-        file: [
-          ...openFiles,
-          ...data.submenuItems.slice(0, MAX_LENGTH - openFiles.length),
-        ],
-      }));
-    } else {
-      setFallbackResults((prev) => ({
-        ...prev,
-        [data.provider]: data.submenuItems.slice(0, MAX_LENGTH),
-      }));
-    }
-  });
-
-  const addItem = useCallback(
-    (providerTitle: string, item: ContextSubmenuItem) => {
-      if (!minisearches[providerTitle]) {
-        return;
-      }
-      minisearches[providerTitle].add(item);
-    },
-    [minisearches],
-  );
-
-  const lastOpenFilesRef = useRef([]);
+  // Update open files for file provider on an interval
+  const lastOpenFilesRef = useRef<ContextSubmenuItemWithProvider[]>([]);
   useEffect(() => {
+    function hasOpenFilesChanged(
+      newFiles: ContextSubmenuItemWithProvider[],
+      oldFiles: ContextSubmenuItemWithProvider[],
+    ) {
+      const newIds = new Set(newFiles.map((f) => f.id));
+      const oldIds = new Set(oldFiles.map((f) => f.id));
+
+      if (newIds.size !== oldIds.size) return true;
+
+      for (const id of newIds) {
+        if (!oldIds.has(id)) return true;
+      }
+
+      for (const id of oldIds) {
+        if (!newIds.has(id)) return true;
+      }
+      return false;
+    }
+
     let isMounted = true;
     const refreshOpenFiles = async () => {
       if (!isMounted) return;
-      const openFiles = await getOpenFilesItems();
-      if (isOpenFilesChanged(openFiles, lastOpenFilesRef.current)) {
+
+      const openFiles = await ideMessenger.ide.getOpenFiles();
+      const workspaceDirs = await ideMessenger.ide.getWorkspaceDirs();
+      const withUniquePaths = getShortestUniqueRelativeUriPaths(
+        openFiles,
+        workspaceDirs,
+      );
+      const openFileItems = withUniquePaths.map((file) => ({
+        id: file.uri,
+        title: getUriPathBasename(file.uri),
+        description: file.uniquePath,
+        providerTitle: "file",
+      }));
+
+      if (hasOpenFilesChanged(openFileItems, lastOpenFilesRef.current)) {
         setFallbackResults((prev) => ({
           ...prev,
           file: deduplicateArray(
-            [...openFiles, ...(Array.isArray(prev.file) ? prev.file : [])],
+            [...openFileItems, ...(prev.file ?? [])],
             (a, b) => a.id === b.id,
           ),
         }));
-        lastOpenFilesRef.current = openFiles;
       }
+      lastOpenFilesRef.current = openFileItems;
     };
 
     const interval = setInterval(refreshOpenFiles, 2000);
@@ -169,114 +120,138 @@ export const SubmenuContextProvidersProvider = ({
       isMounted = false;
       clearInterval(interval);
     };
-  }, [getOpenFilesItems]);
+  }, [ideMessenger]);
 
-  const getSubmenuSearchResults = useMemo(
-    () =>
-      (providerTitle: string | undefined, query: string): SearchResult[] => {
+  const providersLoading = useRef(new Set<ContextProviderName>()).current;
+  const abortControllers = useRef(
+    new Map<ContextProviderName, AbortController>(),
+  ).current;
+
+  const getSubmenuContextItems = useCallback(
+    (
+      providerTitle: string | undefined,
+      query: string,
+      limit: number = MAX_LENGTH,
+    ): ContextSubmenuItemWithProvider[] => {
+      try {
+        // 1. Search using minisearch
+        let searchResults: (SearchResult & ContextSubmenuItemWithProvider)[] =
+          [];
+
         if (providerTitle === undefined) {
-          // Return search combined from all providers
-          const results = Object.keys(minisearches).map((providerTitle) => {
-            const results = minisearches[providerTitle].search(
-              query,
-              MINISEARCH_OPTIONS,
-            );
-            return results.map((result) => {
-              return { ...result, providerTitle };
-            });
-          });
-
-          return results.flat().sort((a, b) => b.score - a.score);
-        }
-        if (!minisearches[providerTitle]) {
-          return [];
-        }
-
-        const results = minisearches[providerTitle]
-          .search(query, MINISEARCH_OPTIONS)
-          .map((result) => {
-            return { ...result, providerTitle };
-          });
-
-        return results;
-      },
-    [minisearches],
-  );
-
-  const getSubmenuContextItems = useMemo(
-    () =>
-      (
-        providerTitle: string | undefined,
-        query: string,
-        limit: number = MAX_LENGTH,
-      ): (ContextSubmenuItem & { providerTitle: string })[] => {
-        try {
-          const results = getSubmenuSearchResults(providerTitle, query);
-          if (results.length === 0) {
-            const fallbackItems = (fallbackResults[providerTitle] ?? [])
-              .slice(0, limit)
+          // Include results from all providers
+          searchResults = Object.keys(minisearches).flatMap((providerTitle) =>
+            minisearches[providerTitle]
+              .search(query, MINISEARCH_OPTIONS)
               .map((result) => {
                 return {
                   ...result,
                   providerTitle,
+                  title: result.title,
+                  description: result.description,
+                };
+              }),
+          );
+        } else {
+          // Only include results from the specified provider
+          if (minisearches[providerTitle]) {
+            searchResults = minisearches[providerTitle]
+              .search(query, MINISEARCH_OPTIONS)
+              .map((result) => {
+                return {
+                  ...result,
+                  providerTitle,
+                  title: result.title,
+                  description: result.description,
                 };
               });
-
-            if (fallbackItems.length === 0 && !initialLoadComplete) {
-              return [
-                {
-                  id: "loading",
-                  title: "Loading...",
-                  description: "Please wait while items are being loaded",
-                  providerTitle: providerTitle || "unknown",
-                },
-              ];
-            }
-
-            return fallbackItems;
           }
-          const limitedResults = results.slice(0, limit).map((result) => {
-            return {
-              id: result.id,
-              title: result.title,
-              description: result.description,
-              providerTitle: result.providerTitle,
-            };
-          });
-          return limitedResults;
-        } catch (error) {
-          console.error("Error in getSubmenuContextItems:", error);
-          return [];
         }
-      },
-    [fallbackResults, getSubmenuSearchResults, initialLoadComplete],
+        searchResults.sort((a, b) => b.score - a.score);
+
+        // 2. Add fallback results if no search results
+        if (searchResults.length === 0) {
+          const fallbackItems = (
+            providerTitle ? (fallbackResults[providerTitle] ?? []) : []
+          )
+            .slice(0, limit)
+            .map((result) => {
+              return {
+                ...result,
+                providerTitle: providerTitle || "unknown",
+              };
+            });
+
+          if (fallbackItems.length === 0) {
+            const loadingFiller = [
+              {
+                id: "loading",
+                title: "Loading...",
+                description: "Please wait while items are being loaded",
+                providerTitle: providerTitle || "unknown",
+              },
+            ];
+
+            // If getting for all providers
+            if (!providerTitle) {
+              // then show loading if ANY loading
+              if (providersLoading.size > 0) {
+                return loadingFiller;
+              }
+            } else {
+              // Otherwise just check if the provider is loading
+              if (providersLoading.has(providerTitle)) {
+                return loadingFiller;
+              }
+            }
+          }
+
+          return fallbackItems;
+        }
+        const limitedResults = searchResults.slice(0, limit).map((result) => {
+          return {
+            id: result.id,
+            title: result.title,
+            description: result.description,
+            providerTitle: result.providerTitle,
+          };
+        });
+        return limitedResults;
+      } catch (error) {
+        console.error("Error in getSubmenuContextItems:", error);
+        return [];
+      }
+    },
+    [fallbackResults, minisearches],
   );
 
-  useEffect(() => {
-    if (contextProviderDescriptions.length === 0 || isLoading) {
-      return;
-    }
-    setIsLoading(true);
-
-    const loadSubmenuItems = async () => {
-      try {
-        await Promise.all(
-          contextProviderDescriptions.map(async (description) => {
-            const shouldSkipProvider =
-              description.dependsOnIndexing && disableIndexing;
-
-            if (shouldSkipProvider) {
-              console.debug(
-                `Skipping ${description.title} provider due to disabled indexing`,
-              );
-              return;
-            }
-
+  const loadSubmenuItems = useCallback(
+    async (providers: "dependsOnIndexing" | "all" | ContextProviderName[]) => {
+      await Promise.allSettled(
+        submenuContextProviders.map(
+          async (description: ContextProviderDescription) => {
+            const controller = new AbortController();
             try {
-              const minisearch = new MiniSearch<ContextSubmenuItem>({
-                fields: ["title", "description"],
-                storeFields: ["id", "title", "description"],
-              });
+              const refreshProvider =
+                providers === "all"
+                  ? true
+                  : providers === "dependsOnIndexing"
+                    ? description.dependsOnIndexing
+                    : providers.includes(description.title);
+
+              if (!refreshProvider) {
+                if (providers === "dependsOnIndexing") {
+                  console.debug(
+                    `Skipping ${description.title} provider due to disabled indexing`,
+                  );
+                }
+                return;
+              }
+
+              // Submenu loading requests cancel existing requests
+              abortControllers.get(description.title)?.abort();
+              abortControllers.set(description.title, controller);
+              providersLoading.add(description.title);
 
               const result = await ideMessenger.request(
                 "context/loadSubmenuItems",
@@ -285,62 +260,116 @@ export const SubmenuContextProvidersProvider = ({
                 },
               );
 
-              if (result.status === "error") {
-                console.error(
-                  `Error loading items for ${description.title}:`,
-                  result.error,
-                );
-                return;
-              }
-              const items = result.content;
+              // IMPORTANT - the controller only prevents invalid loading state
+              // But does not cancel using data from the request
+              // Could uncomment this to truly cancel the request
+              // if (controller.signal.aborted) {
+              //   return console.debug(
+              //     `${description.title} provider loading aborted`,
+              //   );
+              // }
 
-              minisearch.addAll(items);
+              if (result.status === "error") {
+                throw new Error(result.error);
+              }
+              const submenuItems = result.content;
+              const providerTitle = description.title;
+              const renderInlineAs = description.renderInlineAs;
+
+              const itemsWithProvider = submenuItems.map((item) => ({
+                ...item,
+                providerTitle,
+                renderInlineAs,
+              }));
+
+              const minisearch = new MiniSearch<ContextSubmenuItemWithProvider>(
+                {
+                  fields: ["title", "description"],
+                  storeFields: ["id", "title", "description", "providerTitle"],
+                  tokenize: (text) =>
+                    deduplicateArray(
+                      MiniSearch.getDefault("tokenize")(text).concat(
+                        splitCamelCaseAndNonAlphaNumeric(text),
+                      ),
+                      (a, b) => a === b,
+                    ),
+                },
+              );
+
+              const deduplicatedItems = deduplicateArray(
+                submenuItems.map((item) => ({ ...item, providerTitle })),
+                (a, b) => a.id === b.id,
+              );
+              minisearch.addAll(deduplicatedItems);
 
               setMinisearches((prev) => ({
                 ...prev,
-                [description.title]: minisearch,
+                [providerTitle]: minisearch,
               }));
 
-              if (description.title === "file") {
-                const openFiles = await getOpenFilesItems();
+              if (providerTitle === "file") {
                 setFallbackResults((prev) => ({
                   ...prev,
-                  file: [
-                    ...openFiles,
-                    ...items.slice(0, MAX_LENGTH - openFiles.length),
-                  ],
+                  file: deduplicateArray(
+                    [...lastOpenFilesRef.current, ...itemsWithProvider],
+                    (a, b) => a.id === b.id,
+                  ),
                 }));
               } else {
                 setFallbackResults((prev) => ({
                   ...prev,
-                  [description.title]: items.slice(0, MAX_LENGTH),
+                  [providerTitle]: itemsWithProvider,
                 }));
               }
             } catch (error) {
-              console.error(`Error processing ${description.title}:`, error);
+              console.error(
+                `Error loading items for ${description.title}:`,
+                error,
+              );
               console.error(
                 "Error details:",
                 JSON.stringify(error, Object.getOwnPropertyNames(error)),
               );
+            } finally {
+              if (!controller.signal.aborted) {
+                providersLoading.delete(description.title);
+              }
             }
-          }),
-        );
-      } catch (error) {
-        console.error("Error in loadSubmenuItems:", error);
-      } finally {
-        setInitialLoadComplete(true);
-        setIsLoading(false);
-      }
-    };
+          },
+        ),
+      );
+    },
+    [
+      submenuContextProviders,
+      disableIndexing,
+      providersLoading,
+      abortControllers,
+    ],
+  );
 
-    loadSubmenuItems();
-  }, [contextProviderDescriptions, autoLoadTriggered]);
+  useWebviewListener(
+    "refreshSubmenuItems",
+    async (data) => {
+      loadSubmenuItems(data.providers);
+    },
+    [loadSubmenuItems],
+  );
+
+  // Reload all submenu items on the initial config load
+  // TODO - could refresh on any change
+  const initialLoad = useRef(false);
+  useEffect(() => {
+    if (!submenuContextProviders.length || initialLoad.current) {
+      return;
+    }
+    void loadSubmenuItems("all");
+    initialLoad.current = true;
+  }, [loadSubmenuItems, submenuContextProviders, initialLoad]);
 
   return (
     <SubmenuContextProvidersContext.Provider
       value={{
         getSubmenuContextItems,
-        addItem,
       }}
     >
       {children}

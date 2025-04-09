@@ -6,14 +6,18 @@ import {
 } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import StyledMarkdownPreview from "../markdown/StyledMarkdownPreview";
-import { getLastNPathParts, getMarkdownLanguageTagForFile } from "core/util";
+import { getMarkdownLanguageTagForFile } from "core/util";
 import styled from "styled-components";
 import { CodeToEdit } from "core";
+import {
+  getLastNUriRelativePathParts,
+  getUriPathBasename,
+} from "core/util/uri";
 
 export interface CodeToEditListItemProps {
   code: CodeToEdit;
-  onDelete: (codeToEdit: CodeToEdit) => void;
-  onClickFilename: (codeToEdit: CodeToEdit) => void;
+  onDelete: (codeToEdit: CodeToEdit) => void | Promise<void>;
+  onClickFilename: (codeToEdit: CodeToEdit) => void | Promise<void>;
 }
 
 const NoPaddingWrapper = styled.div`
@@ -35,11 +39,15 @@ export default function CodeToEditListItem({
 }: CodeToEditListItemProps) {
   const [showCodeSnippet, setShowCodeSnippet] = useState(false);
 
-  const filepath = code.filepath.split("/").pop() || code.filepath;
-  const fileSubpath = getLastNPathParts(code.filepath, 2);
+  const fileName = getUriPathBasename(code.filepath);
+  const last2Parts = getLastNUriRelativePathParts(
+    window.workspacePaths ?? [],
+    code.filepath,
+    2,
+  );
 
   let isInsertion = false;
-  let title = filepath;
+  let title = fileName;
 
   if ("range" in code) {
     const start = code.range.start.line + 1;
@@ -79,18 +87,18 @@ export default function CodeToEditListItem({
               className="flex-shrink-0 text-xs hover:underline"
               onClick={(e) => {
                 e.stopPropagation();
-                onClickFilename(code);
+                void onClickFilename(code);
               }}
             >
               {title}
             </span>
             <span className="text-lightgray invisible flex-grow truncate text-xs group-hover:visible">
-              {fileSubpath}
+              {last2Parts}
             </span>
           </div>
         </div>
 
-        <div className="invisible flex items-center gap-1.5 group-hover:visible">
+        <div className="invisible flex items-center group-hover:visible">
           <div className={`flex items-center ${isInsertion ? "hidden" : ""}`}>
             {showCodeSnippet ? (
               <ChevronDownIcon
@@ -114,7 +122,7 @@ export default function CodeToEditListItem({
             <XMarkIcon
               onClick={(e) => {
                 e.stopPropagation();
-                onDelete(code);
+                void onDelete(code);
               }}
               className="text-lightgray hover:bg-lightgray hover:text-vsc-foreground h-3.5 w-3.5 cursor-pointer rounded-sm p-0.5 hover:bg-opacity-20"
             />

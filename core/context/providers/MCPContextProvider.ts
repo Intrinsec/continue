@@ -9,6 +9,7 @@ import {
 import { MCPManagerSingleton } from "../mcp";
 
 interface MCPContextProviderOptions {
+  mcpId: string;
   submenuItems: ContextSubmenuItem[];
 }
 
@@ -73,7 +74,15 @@ class MCPContextProvider extends BaseContextProvider {
   async loadSubmenuItems(
     args: LoadSubmenuItemsArgs,
   ): Promise<ContextSubmenuItem[]> {
-    return (this.options as MCPContextProviderOptions).submenuItems;
+    return (this.options as MCPContextProviderOptions).submenuItems.map(
+      (item) => ({
+        ...item,
+        id: JSON.stringify({
+          mcpId: (this.options as MCPContextProviderOptions).mcpId,
+          uri: item.id,
+        }),
+      }),
+    );
   }
 }
 
